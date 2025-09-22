@@ -188,6 +188,18 @@ def calculate_predictions(symbol: str, timeframe: str, features: dict) -> dict:
     ]
     confidence = sum(confidence_factors) / len(confidence_factors)
     
+    # DEBUG: Log detallado de cálculo para identificar problema
+    logger.info(f"🔧 DEBUG SL Calculation for {symbol}:")
+    logger.info(f"   Regime: {regime}")
+    logger.info(f"   SL Base: {sl_base}")
+    logger.info(f"   TF Factor: {tf_factor}")
+    logger.info(f"   Volatility Factor: {volatility_factor:.2f}")
+    logger.info(f"   ATR Factor: {atr_factor:.2f}")
+    logger.info(f"   RSI Factor: {rsi_factor:.2f}")
+    logger.info(f"   BB Factor: {bb_factor:.2f}")
+    logger.info(f"   Lot Factor: {lot_factor:.2f}")
+    logger.info(f"   SL Final: {sl_final:.2f}")
+    
     return {
         'sl_prediction': round(sl_final, 2),
         'tp_prediction': round(tp_final, 2),
@@ -196,7 +208,16 @@ def calculate_predictions(symbol: str, timeframe: str, features: dict) -> dict:
         'regime': regime,
         'symbol': symbol,
         'timeframe': timeframe,
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.utcnow().isoformat(),
+        'debug_info': {
+            'sl_base': sl_base,
+            'tf_factor': tf_factor,
+            'volatility_factor': round(volatility_factor, 2),
+            'atr_factor': round(atr_factor, 2),
+            'rsi_factor': round(rsi_factor, 2),
+            'bb_factor': round(bb_factor, 2),
+            'lot_factor': round(lot_factor, 2)
+        }
     }
 
 # Eventos de startup
