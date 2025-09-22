@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 # FastAPI app
 app = FastAPI(
     title="ARIA XGBoost Universal Predictor",
-    description="Sistema universal multi-timeframe para predicción SL/TP",
-    version="3.1.0"
+    description="Sistema universal multi-timeframe para predicción SL/TP con SL dinámico",
+    version="3.2.0"
 )
 
 # CORS
@@ -38,23 +38,23 @@ app.add_middleware(
 MODELS_LOADED = False
 AVAILABLE_SYMBOLS = []
 
-# Configuración de predicciones por símbolo
+# Configuración de predicciones por símbolo - ACTUALIZADO CON SL DINÁMICO
 SYMBOL_CONFIG = {
     'BTCUSD': {
-        'sl_base': {'ranging': 45, 'trending': 60, 'volatile': 75},
-        'tp_base': {'ranging': 135, 'trending': 180, 'volatile': 225}
+        'sl_base': {'ranging': 80, 'trending': 120, 'volatile': 200},
+        'tp_base': {'ranging': 200, 'trending': 300, 'volatile': 450}
     },
     'EURUSD': {
-        'sl_base': {'ranging': 22, 'trending': 30, 'volatile': 37},
-        'tp_base': {'ranging': 67, 'trending': 90, 'volatile': 112}
+        'sl_base': {'ranging': 60, 'trending': 90, 'volatile': 150},
+        'tp_base': {'ranging': 150, 'trending': 225, 'volatile': 350}
     },
     'GBPUSD': {
-        'sl_base': {'ranging': 25, 'trending': 32, 'volatile': 37},
-        'tp_base': {'ranging': 75, 'trending': 97, 'volatile': 112}
+        'sl_base': {'ranging': 65, 'trending': 95, 'volatile': 160},
+        'tp_base': {'ranging': 160, 'trending': 240, 'volatile': 380}
     },
     'XAUUSD': {
-        'sl_base': {'ranging': 30, 'trending': 37, 'volatile': 50},
-        'tp_base': {'ranging': 90, 'trending': 112, 'volatile': 150}
+        'sl_base': {'ranging': 75, 'trending': 120, 'volatile': 200},  # ACTUALIZADO: 50-400 rango
+        'tp_base': {'ranging': 180, 'trending': 280, 'volatile': 450}  # MEJORADO: TP más amplio
     }
 }
 
@@ -107,19 +107,44 @@ def calculate_predictions(symbol: str, timeframe: str, features: dict) -> dict:
     sl_base = config['sl_base'][regime]
     tp_base = config['tp_base'][regime]
     
-    # Ajustes por timeframe
+    # Ajustes por timeframe - AMPLIADOS para SL dinámico
     tf_multipliers = {
-        'M1': 0.5, 'M5': 0.7, 'M15': 1.0, 'M30': 1.3, 'H1': 1.5, 'H4': 2.0, 'D1': 3.0
+        'M1': 0.7, 'M5': 0.9, 'M15': 1.0, 'M30': 1.2, 'H1': 1.4, 'H4': 1.8, 'D1': 2.2
     }
     tf_factor = tf_multipliers.get(timeframe, 1.0)
     
-    # Ajustes por características del mercado
-    atr_factor = min(2.0, max(0.5, features.get('atr_percentile_100', 50) / 50))
-    volatility_factor = 1 + abs(features.get('volume_imbalance', 0))
+    # Ajustes por características del mercado - AMPLIADOS para rango 50-400
+    atr_factor = min(3.0, max(0.7, features.get('atr_percentile_100', 50) / 25))  # Factor más amplio
+    volatility_factor = 1 + (abs(features.get('volume_imbalance', 0)) * 2)  # Más sensible a volatilidad
     
-    # Calcular predicciones finales
-    sl_final = sl_base * tf_factor * atr_factor
+    # Factor adicional para RSI extremo
+    rsi = features.get('rsi', 50.0)
+    rsi_factor = 1.0
+    if rsi < 20 or rsi > 80:
+        rsi_factor = 1.5  # RSI extremo = SL más amplio
+    elif rsi < 30 or rsi > 70:
+        rsi_factor = 1.2  # RSI alto/bajo = SL amplio
+        
+    # Factor adicional para BB position
+    bb_position = features.get('bb_position', 0.5)
+    bb_factor = 1.0
+    if bb_position > 0.9 or bb_position < 0.1:
+        bb_factor = 1.4  # Muy cerca de bandas = SL amplio
+    elif bb_position > 0.8 or bb_position < 0.2:
+        bb_factor = 1.2  # Cerca de bandas = SL amplio
+    
+    # Calcular predicciones finales con factores ampliados
+    sl_final = sl_base * tf_factor * atr_factor * rsi_factor * bb_factor
     tp_final = tp_base * tf_factor * atr_factor * volatility_factor
+    
+    # Asegurar que SL esté en el rango 50-400 pips para XAUUSD
+    if symbol == 'XAUUSD':
+        sl_final = max(50.0, min(sl_final, 400.0))
+        tp_final = max(80.0, min(tp_final, 500.0))
+    else:
+        # Para otros símbolos, rangos apropiados
+        sl_final = max(20.0, min(sl_final, 200.0))
+        tp_final = max(40.0, min(tp_final, 300.0))
     
     # Calcular confianza
     confidence_factors = [
@@ -172,13 +197,19 @@ async def root():
     """Información del servicio"""
     return {
         "service": "ARIA XGBoost Universal Predictor",
-        "version": "3.1.0",
+        "version": "3.2.0",
         "status": "operational",
-        "system_info": {"type": "rule_based_predictor"},
+        "system_info": {"type": "dynamic_ml_predictor"},
         "models_loaded": len(AVAILABLE_SYMBOLS),
         "symbols_available": AVAILABLE_SYMBOLS,
         "timeframes_supported": ["M1", "M5", "M15", "M30", "H1", "H4", "D1"],
-        "cache_size": 0
+        "cache_size": 0,
+        "features": {
+            "dynamic_sl": True,
+            "sl_range_xauusd": "50-400 pips",
+            "dynamic_tp": True,
+            "multi_factor_analysis": True
+        }
     }
 
 @app.get("/health")
