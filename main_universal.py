@@ -82,14 +82,17 @@ class PredictionResponse(BaseModel):
     timestamp: str
 
 def detect_regime(features: dict) -> str:
-    """Detecta régimen de mercado"""
-    atr = features.get('atr_percentile_100', 50)
-    volatility = abs(features.get('volume_imbalance', 0))
+    """Detecta régimen de mercado - AJUSTADO para mejor sensibilidad"""
+    volatility = features.get('volatility', 0.012)
+    volume_imbalance = abs(features.get('volume_imbalance', 0))
     breakout_freq = features.get('breakout_frequency', 0)
+    trend_strength = abs(features.get('trend_strength', 0))
+    price_acceleration = abs(features.get('price_acceleration', 0))
     
-    if atr > 70 or volatility > 0.15 or breakout_freq > 0.1:
+    # Usar volatility real en lugar de atr_percentile_100
+    if volatility > 0.020 or volume_imbalance > 0.3 or breakout_freq > 0.8:
         return 'volatile'
-    elif abs(features.get('price_acceleration', 0)) > 0.1 or atr > 40:
+    elif trend_strength > 0.03 or price_acceleration > 0.05:
         return 'trending'
     else:
         return 'ranging'
