@@ -116,28 +116,58 @@ def calculate_predictions(symbol: str, timeframe: str, features: dict) -> dict:
     }
     tf_factor = tf_multipliers.get(timeframe, 1.0)
     
-    # Ajustes por características del mercado - AMPLIADOS para rango 50-400
-    atr_factor = min(3.0, max(0.7, features.get('atr_percentile_100', 50) / 25))  # Factor más amplio
-    volatility_factor = 1 + (abs(features.get('volume_imbalance', 0)) * 2)  # Más sensible a volatilidad
+    # Ajustes por características del mercado - MÁS SENSIBLES para variabilidad real
     
-    # Factor adicional para RSI extremo
+    # Factor de volatilidad real (más impactante)
+    volatility = features.get('volatility', 0.012)
+    volatility_factor = 0.5 + (volatility * 50)  # Rango 0.5 - 3.0
+    volatility_factor = max(0.5, min(volatility_factor, 3.0))
+    
+    # Factor ATR más sensible
+    atr_percentile = features.get('atr_percentile_100', 50)
+    atr_factor = 0.6 + (atr_percentile / 100) * 1.8  # Rango 0.6 - 2.4
+    
+    # Factor RSI más agresivo
     rsi = features.get('rsi', 50.0)
-    rsi_factor = 1.0
-    if rsi < 20 or rsi > 80:
-        rsi_factor = 1.5  # RSI extremo = SL más amplio
-    elif rsi < 30 or rsi > 70:
-        rsi_factor = 1.2  # RSI alto/bajo = SL amplio
+    if rsi < 15:
+        rsi_factor = 2.5  # RSI muy extremo
+    elif rsi < 25:
+        rsi_factor = 1.8  # RSI extremo
+    elif rsi < 35:
+        rsi_factor = 1.3  # RSI bajo
+    elif rsi > 85:
+        rsi_factor = 2.5  # RSI muy extremo
+    elif rsi > 75:
+        rsi_factor = 1.8  # RSI extremo  
+    elif rsi > 65:
+        rsi_factor = 1.3  # RSI alto
+    else:
+        rsi_factor = 1.0  # RSI normal
         
-    # Factor adicional para BB position
+    # Factor BB position más sensible
     bb_position = features.get('bb_position', 0.5)
-    bb_factor = 1.0
-    if bb_position > 0.9 or bb_position < 0.1:
-        bb_factor = 1.4  # Muy cerca de bandas = SL amplio
-    elif bb_position > 0.8 or bb_position < 0.2:
-        bb_factor = 1.2  # Cerca de bandas = SL amplio
+    if bb_position > 0.95 or bb_position < 0.05:
+        bb_factor = 2.0  # Extremo de bandas
+    elif bb_position > 0.85 or bb_position < 0.15:
+        bb_factor = 1.6  # Muy cerca de bandas
+    elif bb_position > 0.75 or bb_position < 0.25:
+        bb_factor = 1.3  # Cerca de bandas
+    else:
+        bb_factor = 1.0  # Posición central
+        
+    # Factor de lote más impactante
+    lot_size = features.get('lot_size', 0.01)
+    if lot_size >= 1.0:
+        lot_factor = 2.0  # Lote muy grande
+    elif lot_size >= 0.5:
+        lot_factor = 1.5  # Lote grande
+    elif lot_size >= 0.1:
+        lot_factor = 1.2  # Lote mediano
+    else:
+        lot_factor = 1.0  # Lote pequeño
     
-    # Calcular predicciones finales con factores ampliados
-    sl_final = sl_base * tf_factor * atr_factor * rsi_factor * bb_factor
+    # Calcular predicciones finales con factores más sensibles
+    sl_final = sl_base * tf_factor * volatility_factor * atr_factor * rsi_factor * bb_factor * lot_factor
     tp_final = tp_base * tf_factor * atr_factor * volatility_factor
     
     # Asegurar que SL esté en el rango 50-400 pips para XAUUSD
