@@ -57,10 +57,16 @@ SYMBOL_NORMALIZATION = {
     'USDJPY.S': 'USDJPY', 'USDJPY.s': 'USDJPY',
     'USDJPY.I': 'USDJPY', 'USDJPY.i': 'USDJPY',
     'USDJPYP': 'USDJPY',
-    'USTEC': 'NDX100', 'US100': 'NDX100', 'NAS100': 'NDX100',
-    'US500': 'SPX500', 'SP500': 'SPX500',
-    'DAX': 'DE40', 'GER40': 'DE40',
-    'FTSE': 'UK100', 'DJI': 'US30', 'DOW': 'US30',
+    'USTEC': 'US30', 'US100': 'US30', 'NAS100': 'US30', 'NDX100': 'US30',
+    'US500': 'US500', 'SP500': 'US500', 'SPX500': 'US500', 'SP500.P': 'US500',
+    'DAX': 'DE40', 'GER40': 'DE40', 'DE40': 'DE40',
+    'FTSE': 'UK100', 'UK100': 'UK100',
+    'DJI': 'US30', 'DOW': 'US30', 'DJ30': 'US30', 'DJ30.': 'US30',
+    # Oro con variaciones
+    'GOLD#': 'XAUUSD', 'GOLD': 'XAUUSD', 'XAUUSD-ECN': 'XAUUSD',
+    # Sufijos problemáticos
+    'USDJPY.P': 'USDJPY', 'USDJPY.VM': 'USDJPY',
+    'NAS100.S': 'US30',
 }
 
 def normalize_symbol(symbol: str) -> str:
@@ -77,13 +83,18 @@ def normalize_symbol(symbol: str) -> str:
     
     # Eliminar sufijos comunes
     symbol_clean = symbol_upper
-    suffixes = ['.S', '.I', 'P', '_', '-']
+    suffixes = ['.S', '.I', '.P', 'P', '_', '-', '.VM', '-ECN']
     
     for suffix in suffixes:
         if symbol_clean.endswith(suffix):
             symbol_clean = symbol_clean[:-len(suffix)]
             logger.info(f"🔧 Removiendo sufijo {suffix}: {symbol} → {symbol_clean}")
             break
+    
+    # Limpiar puntos finales que puedan quedar
+    if symbol_clean.endswith('.'):
+        symbol_clean = symbol_clean[:-1]
+        logger.info(f"🔧 Removiendo punto final: {symbol_clean}")
     
     return symbol_clean
 
