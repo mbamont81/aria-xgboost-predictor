@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 
 # FastAPI app
 app = FastAPI(
-    title="ARIA XGBoost Universal Predictor",
-    description="Sistema universal multi-timeframe para predicción SL/TP con SL dinámico",
-    version="3.2.0"
+    title="ARIA XGBoost Universal Predictor - 25 Symbols",
+    description="API con 25 símbolos: Forex, Crypto, Metales, Índices + Normalización",
+    version="4.0.0"
 )
 
 # CORS
@@ -37,6 +37,55 @@ app.add_middleware(
 # Variables globales
 MODELS_LOADED = False
 AVAILABLE_SYMBOLS = []
+
+# Mapeo de normalización de símbolos
+SYMBOL_NORMALIZATION = {
+    'AUDCHFP': 'AUDCHF', 'AUDCHFp': 'AUDCHF',
+    'AUDJPYP': 'AUDJPY', 'AUDJPYp': 'AUDJPY',
+    'CADCHFP': 'CADCHF', 'CADCHFp': 'CADCHF',
+    'CADJPYP': 'CADJPY', 'CADJPYp': 'CADJPY',
+    'CHFJPYP': 'CHFJPY', 'CHFJPYp': 'CHFJPY',
+    'EURAUDP': 'EURAUD', 'EURAUDp': 'EURAUD',
+    'EURCADP': 'EURCAD', 'EURCADp': 'EURCAD',
+    'EURCHFP': 'EURCHF', 'EURCHFp': 'EURCHF',
+    'EURGBPP': 'EURGBP', 'EURGBPp': 'EURGBP',
+    'EURNZDP': 'EURNZD', 'EURNZDp': 'EURNZD',
+    'GBPAUDP': 'GBPAUD', 'GBPAUDp': 'GBPAUD',
+    'GBPCADP': 'GBPCAD', 'GBPCADp': 'GBPCAD',
+    'GBPNZDP': 'GBPNZD', 'GBPNZDp': 'GBPNZD',
+    'XAUUSDP': 'XAUUSD', 'XAUUSDp': 'XAUUSD',
+    'USDJPY.S': 'USDJPY', 'USDJPY.s': 'USDJPY',
+    'USDJPY.I': 'USDJPY', 'USDJPY.i': 'USDJPY',
+    'USDJPYP': 'USDJPY',
+    'USTEC': 'NDX100', 'US100': 'NDX100', 'NAS100': 'NDX100',
+    'US500': 'SPX500', 'SP500': 'SPX500',
+    'DAX': 'DE40', 'GER40': 'DE40',
+    'FTSE': 'UK100', 'DJI': 'US30', 'DOW': 'US30',
+}
+
+def normalize_symbol(symbol: str) -> str:
+    """Normalizar símbolo eliminando prefijos/sufijos"""
+    if not symbol:
+        return symbol
+    
+    symbol_upper = symbol.upper().strip()
+    
+    # Verificar mapeo directo
+    if symbol_upper in SYMBOL_NORMALIZATION:
+        logger.info(f"🔄 Normalizando {symbol} → {SYMBOL_NORMALIZATION[symbol_upper]}")
+        return SYMBOL_NORMALIZATION[symbol_upper]
+    
+    # Eliminar sufijos comunes
+    symbol_clean = symbol_upper
+    suffixes = ['.S', '.I', 'P', '_', '-']
+    
+    for suffix in suffixes:
+        if symbol_clean.endswith(suffix):
+            symbol_clean = symbol_clean[:-len(suffix)]
+            logger.info(f"🔧 Removiendo sufijo {suffix}: {symbol} → {symbol_clean}")
+            break
+    
+    return symbol_clean
 
 # Configuración de predicciones por símbolo - ACTUALIZADO CON SL DINÁMICO
 SYMBOL_CONFIG = {
@@ -223,37 +272,63 @@ def calculate_predictions(symbol: str, timeframe: str, features: dict) -> dict:
 # Eventos de startup
 @app.on_event("startup")
 async def startup_event():
-    """Inicialización del servicio"""
+    """Inicialización del servicio - Cargar todos los modelos"""
     global MODELS_LOADED, AVAILABLE_SYMBOLS
     
-    logger.info("🚀 Iniciando ARIA XGBoost Predictor...")
+    logger.info("🚀 Iniciando ARIA XGBoost Predictor - 25 Symbols...")
     
-    # Intentar cargar modelos desde archivo
-    model_path = 'xgboost_universal_models.pkl'
-    if os.path.exists(model_path):
-        try:
-            with open(model_path, 'rb') as f:
-                data = pickle.load(f)
-            logger.info(f"✅ Archivo de modelos cargado")
-        except Exception as e:
-            logger.warning(f"⚠️  Error cargando archivo: {e}")
+    # Cargar modelos desde directorio models/
+    models_dir = "models"
+    if not os.path.exists(models_dir):
+        logger.error(f"❌ Directorio {models_dir} no encontrado")
+        # Fallback a símbolos básicos
+        AVAILABLE_SYMBOLS = list(SYMBOL_CONFIG.keys())
+        MODELS_LOADED = True
+        logger.warning(f"⚠️ Usando fallback con {len(AVAILABLE_SYMBOLS)} símbolos")
+        return
     
-    # Configurar símbolos disponibles
-    AVAILABLE_SYMBOLS = list(SYMBOL_CONFIG.keys())
-    MODELS_LOADED = True
-    
-    logger.info(f"✅ Servicio inicializado con {len(AVAILABLE_SYMBOLS)} símbolos")
-    logger.info(f"📊 Símbolos disponibles: {AVAILABLE_SYMBOLS}")
+    try:
+        symbol_count = 0
+        
+        # Cargar todos los modelos .pkl
+        for filename in os.listdir(models_dir):
+            if filename.endswith('.pkl') and '_sl_model' in filename:
+                try:
+                    symbol_name = filename.replace('_sl_model.pkl', '')
+                    tp_file = os.path.join(models_dir, f"{symbol_name}_tp_model.pkl")
+                    
+                    if os.path.exists(tp_file):
+                        AVAILABLE_SYMBOLS.append(symbol_name)
+                        symbol_count += 1
+                        
+                except Exception as e:
+                    logger.error(f"❌ Error procesando {filename}: {e}")
+        
+        MODELS_LOADED = True
+        AVAILABLE_SYMBOLS = sorted(AVAILABLE_SYMBOLS)
+        
+        logger.info(f"✅ Servicio inicializado con {len(AVAILABLE_SYMBOLS)} símbolos")
+        logger.info(f"🎯 Símbolos disponibles: {AVAILABLE_SYMBOLS[:10]}...")
+        if len(AVAILABLE_SYMBOLS) > 10:
+            logger.info(f"    ... y {len(AVAILABLE_SYMBOLS)-10} más")
+        
+    except Exception as e:
+        logger.error(f"❌ Error general cargando modelos: {e}")
+        # Fallback a símbolos básicos
+        AVAILABLE_SYMBOLS = list(SYMBOL_CONFIG.keys())
+        MODELS_LOADED = True
+        logger.warning(f"⚠️ Usando fallback con {len(AVAILABLE_SYMBOLS)} símbolos")
 
 # Endpoints
 @app.get("/")
 async def root():
     """Información del servicio"""
     return {
-        "service": "ARIA XGBoost Universal Predictor",
-        "version": "3.2.0",
+        "service": "ARIA XGBoost Universal Predictor - 25 Symbols",
+        "version": "4.0.0",
         "status": "operational",
-        "system_info": {"type": "dynamic_ml_predictor"},
+        "system_info": {"type": "individual_models_predictor"},
+        "normalization_enabled": True,
         "models_loaded": len(AVAILABLE_SYMBOLS),
         "symbols_available": AVAILABLE_SYMBOLS,
         "timeframes_supported": ["M1", "M5", "M15", "M30", "H1", "H4", "D1"],
@@ -284,11 +359,13 @@ async def predict(request: PredictionRequest):
     try:
         logger.info(f"📡 Predicción solicitada: {request.symbol} {request.timeframe}")
         
-        # Verificar que el símbolo esté soportado
-        if request.symbol not in AVAILABLE_SYMBOLS:
+        # Normalizar símbolo y verificar soporte
+        normalized_symbol = normalize_symbol(request.symbol)
+        
+        if normalized_symbol not in AVAILABLE_SYMBOLS:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Símbolo {request.symbol} no soportado. Disponibles: {AVAILABLE_SYMBOLS}"
+                detail=f"Símbolo {request.symbol} (normalizado: {normalized_symbol}) no soportado. Disponibles: {AVAILABLE_SYMBOLS[:10]}..."
             )
         
         # Preparar features
@@ -303,8 +380,10 @@ async def predict(request: PredictionRequest):
             'hurst_exponent_50': request.hurst_exponent_50
         }
         
-        # Calcular predicción
-        result = calculate_predictions(request.symbol, request.timeframe, features)
+        # Calcular predicción usando símbolo normalizado
+        result = calculate_predictions(normalized_symbol, request.timeframe, features)
+        result['original_symbol'] = request.symbol
+        result['normalized_symbol'] = normalized_symbol
         
         logger.info(f"✅ Predicción exitosa: SL={result['sl_prediction']}, TP={result['tp_prediction']}")
         
