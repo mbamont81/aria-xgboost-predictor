@@ -59,7 +59,7 @@ SYMBOL_NORMALIZATION = {
     'USDJPYP': 'USDJPY',
     'USTEC': 'US30', 'US100': 'US30', 'NAS100': 'US30', 'NDX100': 'US30',
     'US500': 'US500', 'SP500': 'US500', 'SPX500': 'US500', 'SP500.P': 'US500',
-    'DAX': 'DE40', 'GER40': 'DE40', 'DE40': 'DE40',
+    'DAX': 'UK100', 'GER40': 'UK100', 'DE40': 'UK100', 'GER40.S': 'UK100',
     'FTSE': 'UK100', 'UK100': 'UK100',
     'DJI': 'US30', 'DOW': 'US30', 'DJ30': 'US30', 'DJ30.': 'US30',
     # Oro con variaciones
@@ -67,8 +67,7 @@ SYMBOL_NORMALIZATION = {
     # Sufijos problemáticos
     'USDJPY.P': 'USDJPY', 'USDJPY.VM': 'USDJPY',
     'NAS100.S': 'US30',
-    # Símbolos faltantes - mapear a similares
-    'DE40': 'UK100',      # Índice europeo similar
+    # Símbolos faltantes - mapear a similares (ya mapeado arriba)
     'USDCHF': 'EURUSD',   # Par mayor similar
     'NZDUSD': 'GBPUSD',   # Par mayor similar
     'AUDCAD': 'AUDCHF',   # Par AUD similar
