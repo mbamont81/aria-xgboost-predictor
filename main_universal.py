@@ -67,6 +67,12 @@ SYMBOL_NORMALIZATION = {
     # Sufijos problemáticos
     'USDJPY.P': 'USDJPY', 'USDJPY.VM': 'USDJPY',
     'NAS100.S': 'US30',
+    # Símbolos faltantes - mapear a similares
+    'DE40': 'UK100',      # Índice europeo similar
+    'USDCHF': 'EURUSD',   # Par mayor similar
+    'NZDUSD': 'GBPUSD',   # Par mayor similar
+    'AUDCAD': 'AUDCHF',   # Par AUD similar
+    'AUDUSD': 'AUDCHF',   # Mapear AUDUSD a AUDCHF (similar)
 }
 
 def normalize_symbol(symbol: str) -> str:
