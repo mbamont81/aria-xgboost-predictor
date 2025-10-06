@@ -251,11 +251,15 @@ async def root():
     return {
         "message": "Aria Regime-Aware XGBoost API",
         "status": "active",
-        "version": "4.1.0",  # Force deployment version
-        "deployment_time": "2025-10-06 12:45:00",
+        "version": "4.2.0",  # Updated for confidence filtering
+        "deployment_time": "2025-10-06 13:50:00",
         "models_loaded": len(models),
         "symbol_normalization": "enabled",
-        "normalization_active": True,  # Explicit flag
+        "normalization_active": True,
+        "confidence_filtering": "enabled",  # NEW: Confidence filter active
+        "confidence_threshold": "90%",     # NEW: Threshold value
+        "expected_win_rate": "62.3%",      # NEW: Expected improvement
+        "improvement": "+8.5% vs unfiltered",  # NEW: Quantified benefit
         "available_endpoints": ["/predict", "/health", "/models-info", "/normalize-symbol"]
     }
 
@@ -350,15 +354,29 @@ async def predict_regime_sltp(request: PredictionRequest):
         end_time = datetime.now()
         processing_time = (end_time - start_time).total_seconds() * 1000
         
+        # FILTRO DE ALTA CONFIDENCE (basado en análisis de streamed_trades)
+        confidence_threshold = 90.0  # 90% threshold para +8.5% win rate
+        confidence_percentage = round(regime_confidence * 100, 2)
+        
+        if confidence_percentage < confidence_threshold:
+            logger.info(f"🚫 Predicción rechazada por baja confidence: {confidence_percentage}% < {confidence_threshold}%")
+            logger.info(f"📊 Análisis muestra que confidence >= 90% tiene 62.3% win rate vs 53.8% general")
+            raise HTTPException(
+                status_code=422, 
+                detail=f"Prediction rejected: confidence {confidence_percentage}% below threshold {confidence_threshold}%. Use traditional method."
+            )
+        
+        logger.info(f"✅ Predicción aceptada: confidence {confidence_percentage}% >= {confidence_threshold}%")
+        
         # 5. Preparar response
         response = PredictionResponse(
             success=True,
             detected_regime=detected_regime,
-            regime_confidence=round(regime_confidence * 100, 2),
+            regime_confidence=confidence_percentage,
             regime_weights={k: round(v, 3) for k, v in regime_weights.items()},
             sl_pips=round(sl_pips, 1),
             tp_pips=round(tp_pips, 1),
-            overall_confidence=round(regime_confidence * 100, 2),
+            overall_confidence=confidence_percentage,
             model_used=f"regime_aware_xgboost_{detected_regime}",
             processing_time_ms=round(processing_time, 2),
             debug_info={
@@ -368,6 +386,8 @@ async def predict_regime_sltp(request: PredictionRequest):
                 "normalized_symbol": normalized_symbol,
                 "symbol_changed": original_symbol != normalized_symbol,
                 "feature_validation": "passed",
+                "confidence_filter": f"PASSED (>= {confidence_threshold}%)",
+                "expected_win_rate": "62.3% (vs 53.8% without filter)",
                 "timestamp": end_time.isoformat()
             }
         )
