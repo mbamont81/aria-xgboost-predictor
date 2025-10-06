@@ -251,8 +251,11 @@ async def root():
     return {
         "message": "Aria Regime-Aware XGBoost API",
         "status": "active",
+        "version": "4.1.0",  # Force deployment version
+        "deployment_time": "2025-10-06 12:45:00",
         "models_loaded": len(models),
         "symbol_normalization": "enabled",
+        "normalization_active": True,  # Explicit flag
         "available_endpoints": ["/predict", "/health", "/models-info", "/normalize-symbol"]
     }
 
