@@ -1,0 +1,18 @@
+{
+  "retraining_date": "2025-10-06T13:47:21.958828",
+  "total_models": 1,
+  "models": [
+    "trending"
+  ],
+  "data_period": {
+    "start": "2025-09-16 10:38:01.022083",
+    "end": "2025-10-06 16:28:20.106503",
+    "total_trades": 3662
+  },
+  "improvements": {
+    "data_cleaning": "Applied",
+    "robust_features": "Applied",
+    "confidence_filtering": "Available",
+    "regime_optimization": "Available"
+  }
+}

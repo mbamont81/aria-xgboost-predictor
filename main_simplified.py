@@ -6,14 +6,6 @@ import os
 from datetime import datetime
 import logging
 import re
-import psycopg2
-from psycopg2 import OperationalError
-import pandas as pd
-import xgboost as xgb
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-import threading
-import time
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -127,11 +119,6 @@ def normalize_symbol_for_xgboost(symbol: str) -> str:
         "EURCHF": "EURCHF", # Verificar si existe modelo
         "EURGBP": "EURGBP", # Verificar si existe modelo
         "AUDCAD": "AUDCHF", # Mapeo conocido que ya funciona
-        # MEJORA CRÍTICA: Normalizar variantes de GOLD a XAUUSD
-        "GOLD#": "XAUUSD",  # GOLD# → XAUUSD (22 trades)
-        "Gold": "XAUUSD",   # Gold → XAUUSD (21 trades)  
-        "XAUUSD.s": "XAUUSD", # XAUUSD.s → XAUUSD (29 trades)
-        "XAUUSD.p": "XAUUSD", # XAUUSD.p → XAUUSD (2 trades)
     }
     
     if normalized_symbol in post_cleanup_mappings:
@@ -170,31 +157,6 @@ class PredictionResponse(BaseModel):
     processing_time_ms: float
     debug_info: dict
 
-# NUEVAS ESTRUCTURAS PARA ENTRENAMIENTO CONTINUO
-class TrainingDataRequest(BaseModel):
-    symbol: str
-    trade_type: int  # 0=buy, 1=sell
-    entry_price: float
-    exit_price: float
-    profit: float
-    open_time: str
-    close_time: str
-    atr_at_open: float
-    rsi_at_open: float
-    ma50_at_open: float
-    ma200_at_open: float
-    volatility_at_open: float
-    xgboost_confidence: float
-    market_regime: str
-    was_xgboost_used: bool
-
-class TrainingDataResponse(BaseModel):
-    success: bool
-    message: str
-    trades_stored: int
-    retraining_triggered: bool
-    next_retrain_threshold: int
-
 # Variables globales para modelos
 models = {}
 feature_names = [
@@ -202,13 +164,6 @@ feature_names = [
     "candle_body_ratio_mean", "breakout_frequency", "volume_imbalance", 
     "rolling_autocorr_20", "hurst_exponent_50"
 ]
-
-# Variables globales para entrenamiento continuo
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://aria_audit_db_user:RaXTVt9ddTIRwiDcd3prxjDbf7ga1Ant@dpg-d20ht36uk2gs73c9tmbg-a.oregon-postgres.render.com/aria_audit_db')
-RETRAIN_THRESHOLD = 50  # Re-entrenar cada 50 trades nuevos
-training_data_count = 0
-last_retrain_time = datetime.now()
-retraining_in_progress = False
 
 def load_models():
     """Cargar todos los modelos al iniciar la aplicación"""
@@ -261,174 +216,6 @@ def validate_features(features: np.ndarray) -> bool:
     except:
         return False
 
-# FUNCIONES DE ENTRENAMIENTO CONTINUO
-def get_database_connection():
-    """Obtener conexión a PostgreSQL"""
-    try:
-        conn = psycopg2.connect(DATABASE_URL)
-        return conn
-    except Exception as e:
-        logger.error(f"Error conectando a PostgreSQL: {e}")
-        return None
-
-def count_recent_trades():
-    """Contar trades recientes desde último reentrenamiento"""
-    try:
-        conn = get_database_connection()
-        if not conn:
-            return 0
-        
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT COUNT(*) FROM streamed_trades 
-            WHERE stream_timestamp >= %s 
-            AND was_xgboost_used = true
-        """, (last_retrain_time,))
-        
-        count = cursor.fetchone()[0]
-        cursor.close()
-        conn.close()
-        return count
-    except Exception as e:
-        logger.error(f"Error contando trades: {e}")
-        return 0
-
-def retrain_models_from_database():
-    """Re-entrenar modelos usando datos de PostgreSQL"""
-    global models, retraining_in_progress, last_retrain_time
-    
-    if retraining_in_progress:
-        logger.info("🔄 Reentrenamiento ya en progreso, saltando")
-        return False
-    
-    retraining_in_progress = True
-    logger.info("🚀 Iniciando reentrenamiento automático...")
-    
-    try:
-        conn = get_database_connection()
-        if not conn:
-            return False
-        
-        # Obtener datos de entrenamiento (últimos 30 días)
-        cutoff_date = datetime.now() - timedelta(days=30)
-        
-        query = """
-        SELECT 
-            symbol, trade_type, entry_price, exit_price, profit,
-            atr_at_open, rsi_at_open, ma50_at_open, ma200_at_open,
-            volatility_at_open, xgboost_confidence, market_regime,
-            open_time, was_xgboost_used
-        FROM streamed_trades 
-        WHERE stream_timestamp >= %s
-        AND was_xgboost_used = true
-        AND profit IS NOT NULL
-        ORDER BY stream_timestamp DESC
-        """
-        
-        df = pd.read_sql_query(query, conn, params=[cutoff_date])
-        conn.close()
-        
-        if len(df) < 100:
-            logger.warning(f"Insuficientes datos para reentrenamiento: {len(df)} trades")
-            return False
-        
-        logger.info(f"📊 Datos para reentrenamiento: {len(df)} trades")
-        
-        # Crear features mejoradas
-        df['hour'] = pd.to_datetime(df['open_time']).dt.hour
-        df['ma_trend'] = np.where(
-            df['ma200_at_open'] > 0,
-            (df['ma50_at_open'] - df['ma200_at_open']) / df['ma200_at_open'],
-            0
-        )
-        df['volatility_normalized'] = df.groupby('symbol')['volatility_at_open'].transform(
-            lambda x: (x - x.mean()) / x.std() if x.std() > 0 else 0
-        )
-        df['is_profitable'] = (df['profit'] > 0).astype(int)
-        
-        # Re-entrenar modelo principal (XAUUSD si hay suficientes datos)
-        xauusd_data = df[df['symbol'] == 'XAUUSD']
-        
-        if len(xauusd_data) >= 50:
-            logger.info(f"🎯 Re-entrenando modelo XAUUSD con {len(xauusd_data)} trades")
-            
-            # Features para el modelo
-            feature_cols = ['trade_type', 'hour', 'ma_trend', 'volatility_normalized', 'atr_at_open']
-            X = xauusd_data[feature_cols].fillna(0)
-            y = xauusd_data['is_profitable']
-            
-            # Limpiar datos
-            X = X.replace([np.inf, -np.inf], 0)
-            
-            # Entrenar nuevo modelo
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.3, random_state=42
-            )
-            
-            new_model = xgb.XGBClassifier(
-                n_estimators=100,
-                max_depth=4,
-                learning_rate=0.1,
-                random_state=42
-            )
-            
-            new_model.fit(X_train, y_train)
-            
-            # Evaluar
-            y_pred = new_model.predict(X_test)
-            accuracy = accuracy_score(y_test, y_pred)
-            
-            logger.info(f"✅ Nuevo modelo XAUUSD - Accuracy: {accuracy:.4f}")
-            
-            # Solo actualizar si mejora
-            if accuracy > 0.6:  # Threshold mínimo
-                # Guardar nuevo modelo
-                model_path = "models/xauusd_retrained.pkl"
-                joblib.dump({
-                    'model': new_model,
-                    'accuracy': accuracy,
-                    'retrain_date': datetime.now().isoformat(),
-                    'trades_used': len(xauusd_data)
-                }, model_path)
-                
-                logger.info(f"💾 Modelo XAUUSD actualizado - Accuracy: {accuracy:.4f}")
-                
-                # Actualizar timestamp de reentrenamiento
-                last_retrain_time = datetime.now()
-                
-                return True
-        
-        return False
-        
-    except Exception as e:
-        logger.error(f"❌ Error en reentrenamiento: {e}")
-        return False
-    finally:
-        retraining_in_progress = False
-
-def trigger_retraining_if_needed():
-    """Verificar si es necesario reentrenar y hacerlo"""
-    recent_trades = count_recent_trades()
-    
-    if recent_trades >= RETRAIN_THRESHOLD:
-        logger.info(f"🎯 Threshold alcanzado: {recent_trades} trades nuevos >= {RETRAIN_THRESHOLD}")
-        
-        # Ejecutar reentrenamiento en thread separado
-        def retrain_async():
-            success = retrain_models_from_database()
-            if success:
-                logger.info("✅ Reentrenamiento completado exitosamente")
-            else:
-                logger.warning("⚠️ Reentrenamiento falló o no fue necesario")
-        
-        thread = threading.Thread(target=retrain_async)
-        thread.daemon = True
-        thread.start()
-        
-        return True
-    
-    return False
-
 app = FastAPI()
 
 @app.on_event("startup")
@@ -444,21 +231,15 @@ async def root():
     return {
         "message": "Aria Regime-Aware XGBoost API",
         "status": "active",
-        "version": "5.0.0-CONTINUOUS_LEARNING",  # Major upgrade: continuous learning
-        "deployment_time": "2025-10-06 19:00:00",
+        "version": "4.2.0-SIMPLIFIED",  # Clear version indicator
+        "deployment_time": "2025-10-06 18:25:00",
         "models_loaded": len(models),
         "symbol_normalization": "enabled",
-        "confidence_calibration": "enabled",
-        "continuous_learning": "enabled",  # NEW: Continuous learning system
-        "training_data_endpoint": "/xgboost/add_training_data",  # EA endpoint
-        "auto_retraining": f"Every {RETRAIN_THRESHOLD} trades",
-        "database_integration": "PostgreSQL streamed_trades",
-        "current_win_rate": "63.5%",
-        "improvement_type": "continuous_model_improvement",
-        "available_endpoints": [
-            "/predict", "/health", "/models-info", "/normalize-symbol",
-            "/xgboost/add_training_data", "/xgboost/training_status"
-        ]
+        "confidence_filtering": "enabled",  # Confidence filter active
+        "confidence_threshold": "90%",     # Threshold value
+        "expected_win_rate": "62.3%",      # Expected improvement
+        "improvement": "+8.5% vs unfiltered",
+        "available_endpoints": ["/predict", "/health", "/models-info", "/normalize-symbol"]
     }
 
 @app.get("/health")
@@ -539,32 +320,19 @@ async def predict_regime_sltp(request: PredictionRequest):
         end_time = datetime.now()
         processing_time = (end_time - start_time).total_seconds() * 1000
         
-        # CALIBRACIÓN DE CONFIDENCE (basado en análisis de streamed_trades)
-        def calibrate_confidence(raw_confidence, symbol, regime):
-            """Calibrar confidence basado en performance histórica real"""
-            # Factores de calibración basados en análisis de 3,662 trades reales
-            calibration_factors = {
-                'XAUUSD': {
-                    'trending': 0.85,  # Reduce overconfidence (587 trades perdedores con 94.7% conf)
-                    'volatile': 1.1,   # Mejor performance en volatile
-                    'ranging': 0.9
-                },
-                'BTCUSD': {
-                    'trending': 0.9,   # 50% win rate observado
-                    'volatile': 1.05,
-                    'ranging': 0.95
-                }
-            }
-            
-            base_factor = calibration_factors.get(symbol, {}).get(regime, 1.0)
-            calibrated = raw_confidence * base_factor
-            return min(calibrated, 1.0)  # Cap a 100%
+        # FILTRO DE ALTA CONFIDENCE (basado en análisis de streamed_trades)
+        confidence_threshold = 90.0  # 90% threshold para +8.5% win rate
+        confidence_percentage = round(regime_confidence * 100, 2)
         
-        # Aplicar calibración
-        calibrated_confidence = calibrate_confidence(regime_confidence, normalized_symbol, detected_regime)
-        confidence_percentage = round(calibrated_confidence * 100, 2)
+        if confidence_percentage < confidence_threshold:
+            logger.info(f"🚫 Predicción rechazada por baja confidence: {confidence_percentage}% < {confidence_threshold}%")
+            logger.info(f"📊 Análisis muestra que confidence >= 90% tiene 62.3% win rate vs 53.8% general")
+            raise HTTPException(
+                status_code=422, 
+                detail=f"Prediction rejected: confidence {confidence_percentage}% below threshold {confidence_threshold}%. Use traditional method."
+            )
         
-        logger.info(f"🎯 Confidence calibrada: {round(regime_confidence*100, 2)}% → {confidence_percentage}% (símbolo: {normalized_symbol}, régimen: {detected_regime})")
+        logger.info(f"✅ Predicción aceptada: confidence {confidence_percentage}% >= {confidence_threshold}%")
         
         # Preparar response
         response = PredictionResponse(
@@ -584,9 +352,8 @@ async def predict_regime_sltp(request: PredictionRequest):
                 "normalized_symbol": normalized_symbol,
                 "symbol_changed": original_symbol != normalized_symbol,
                 "feature_validation": "passed",
-                "confidence_calibration": f"Applied: {round(regime_confidence*100, 2)}% → {confidence_percentage}%",
-                "calibration_reason": f"Reduces overconfidence for {normalized_symbol} in {detected_regime}",
-                "based_on_analysis": "3,662 real trades from streamed_trades",
+                "confidence_filter": f"PASSED (>= {confidence_threshold}%)",
+                "expected_win_rate": "62.3% (vs 53.8% without filter)",
                 "timestamp": end_time.isoformat()
             }
         )
@@ -615,58 +382,6 @@ async def normalize_symbol_endpoint(symbol: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error normalizando símbolo: {str(e)}")
-
-# ENDPOINT QUE EL EA ESTÁ BUSCANDO
-@app.post("/xgboost/add_training_data")
-async def add_training_data(request: TrainingDataRequest):
-    """Endpoint para recibir datos de entrenamiento del EA"""
-    global training_data_count
-    
-    try:
-        logger.info(f"📊 Datos de entrenamiento recibidos: {request.symbol} (profit: {request.profit})")
-        
-        # Incrementar contador
-        training_data_count += 1
-        
-        # Verificar si necesitamos reentrenar
-        retraining_triggered = trigger_retraining_if_needed()
-        
-        # Calcular próximo threshold
-        recent_trades = count_recent_trades()
-        next_threshold = RETRAIN_THRESHOLD - recent_trades
-        
-        response = TrainingDataResponse(
-            success=True,
-            message=f"Training data received for {request.symbol}",
-            trades_stored=training_data_count,
-            retraining_triggered=retraining_triggered,
-            next_retrain_threshold=max(0, next_threshold)
-        )
-        
-        if retraining_triggered:
-            logger.info("🚀 Reentrenamiento automático iniciado")
-        
-        return response
-        
-    except Exception as e:
-        logger.error(f"❌ Error procesando training data: {e}")
-        raise HTTPException(status_code=500, detail=f"Error procesando datos: {str(e)}")
-
-@app.get("/xgboost/training_status")
-async def training_status():
-    """Estado del sistema de entrenamiento continuo"""
-    recent_trades = count_recent_trades()
-    
-    return {
-        "continuous_learning": "enabled",
-        "recent_trades_count": recent_trades,
-        "retrain_threshold": RETRAIN_THRESHOLD,
-        "trades_until_retrain": max(0, RETRAIN_THRESHOLD - recent_trades),
-        "last_retrain_time": last_retrain_time.isoformat(),
-        "retraining_in_progress": retraining_in_progress,
-        "database_connected": get_database_connection() is not None,
-        "total_training_data_received": training_data_count
-    }
 
 if __name__ == "__main__":
     import uvicorn
