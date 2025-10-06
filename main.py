@@ -5,10 +5,132 @@ import joblib
 import os
 from datetime import datetime
 import logging
+import re
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Función de normalización de símbolos (igual que en EA)
+def normalize_symbol_for_xgboost(symbol: str) -> str:
+    """
+    Normaliza símbolos de broker a formato estándar para XGBoost
+    Implementa la misma lógica que AriaXGBoostIntegration.mqh
+    """
+    if not symbol:
+        return ""
+    
+    original_symbol = symbol
+    normalized_symbol = symbol.upper()
+    
+    # PASO 1: Mapeos específicos de brokers conocidos
+    broker_mappings = {
+        # Raw Trading Ltd mappings
+        "TECDE30": "GER30",
+        "USTEC": "NAS100", 
+        "JP225": "JPN225",
+        "XTIUSD": "OILUSD",
+        "XNGUSD": "NATGAS",
+        "XBRUSD": "OILUSD",
+        
+        # Otros mapeos comunes
+        "DE30": "GER30",
+        "DE40": "GER30",
+        "DAX30": "GER30",
+        "DAX40": "GER30",
+        "US30": "DOW30",
+        "US100": "NAS100",
+        "US500": "SPX500",
+        "UK100": "FTSE100",
+        "FR40": "CAC40",
+        "ES35": "IBEX35",
+        "IT40": "MIB40",
+        "HK50": "HSI50",
+        "AU200": "AUS200",
+        "GOLD": "XAUUSD",
+        "SILVER": "XAGUSD",
+        "BRENT": "OILUSD",
+        "WTI": "OILUSD"
+    }
+    
+    # Aplicar mapeo directo si existe
+    if normalized_symbol in broker_mappings:
+        normalized_symbol = broker_mappings[normalized_symbol]
+        logger.info(f"🔄 Symbol mapping: {original_symbol} → {normalized_symbol}")
+        return normalized_symbol
+    
+    # PASO 2: Normalización de prefijos comunes
+    prefix_mappings = {
+        "XAUUSD": ["GOLD", "XAU"],
+        "XAGUSD": ["SILVER", "XAG"], 
+        "OILUSD": ["OIL", "CRUDE", "WTI", "BRENT", "XTI", "XBR"],
+        "NATGAS": ["GAS", "NGAS", "XNG"],
+        "BTCUSD": ["BTC", "BITCOIN"],
+        "ETHUSD": ["ETH", "ETHEREUM"]
+    }
+    
+    for standard_symbol, prefixes in prefix_mappings.items():
+        for prefix in prefixes:
+            if normalized_symbol.startswith(prefix):
+                normalized_symbol = standard_symbol
+                logger.info(f"🔄 Prefix normalization: {original_symbol} → {normalized_symbol}")
+                return normalized_symbol
+    
+    # PASO 3: Normalización de índices por región
+    index_mappings = {
+        "GER30": ["GER", "DAX", "DE30", "DE40", "GERMANY"],
+        "NAS100": ["NAS", "NASDAQ", "US100", "USTEC"],
+        "SPX500": ["SPX", "SP500", "US500", "SPY"],
+        "DOW30": ["DOW", "DJI", "US30", "DJIA"],
+        "JPN225": ["JPN", "NIKKEI", "JP225", "N225"],
+        "FTSE100": ["FTSE", "UK100", "UKX"],
+        "CAC40": ["CAC", "FR40", "FRA40"],
+        "IBEX35": ["IBEX", "ES35", "SPA35"],
+        "MIB40": ["MIB", "IT40", "ITA40"],
+        "HSI50": ["HSI", "HK50", "HKG50"],
+        "AUS200": ["AUS", "AU200", "ASX200"]
+    }
+    
+    for standard_symbol, variations in index_mappings.items():
+        for variation in variations:
+            if variation in normalized_symbol:
+                normalized_symbol = standard_symbol
+                logger.info(f"🔄 Index normalization: {original_symbol} → {normalized_symbol}")
+                return normalized_symbol
+    
+    # PASO 4: Remover sufijos comunes de brokers (basado en logs de Render)
+    
+    # Casos especiales de sufijos compuestos
+    compound_suffixes = [".M", ".F", ".C"]
+    for suffix in compound_suffixes:
+        if suffix in normalized_symbol:
+            normalized_symbol = normalized_symbol.replace(suffix, "")
+            logger.info(f"🔄 Compound suffix removed: {original_symbol} → {normalized_symbol}")
+    
+    # Remover sufijo '#' (GOLD# → GOLD)
+    if "#" in normalized_symbol:
+        normalized_symbol = normalized_symbol.replace("#", "")
+        logger.info(f"🔄 Hash suffix removed: {original_symbol} → {normalized_symbol}")
+    
+    # Sufijos simples al final
+    if len(normalized_symbol) > 6:
+        simple_suffixes = ["M", ".", "_", "C", "E", "F", "P"]
+        last_char = normalized_symbol[-1]
+        if last_char in simple_suffixes:
+            normalized_symbol = normalized_symbol[:-1]
+            logger.info(f"🔄 Simple suffix removed: {original_symbol} → {normalized_symbol}")
+    
+    # PASO 5: Aplicar mapeos finales después de limpieza
+    if normalized_symbol in broker_mappings:
+        final_symbol = broker_mappings[normalized_symbol]
+        logger.info(f"🔄 Final mapping: {normalized_symbol} → {final_symbol}")
+        normalized_symbol = final_symbol
+    
+    # Log solo si hubo cambio
+    if normalized_symbol != original_symbol:
+        logger.info(f"✅ Symbol normalized: {original_symbol} → {normalized_symbol}")
+    
+    return normalized_symbol
 
 # Inicializar FastAPI
 app = FastAPI(
@@ -115,7 +237,8 @@ async def root():
         "message": "Aria Regime-Aware XGBoost API",
         "status": "active",
         "models_loaded": len(models),
-        "available_endpoints": ["/predict", "/health", "/models-info"]
+        "symbol_normalization": "enabled",
+        "available_endpoints": ["/predict", "/health", "/models-info", "/normalize-symbol"]
     }
 
 @app.get("/health")
@@ -142,6 +265,10 @@ async def predict_regime_sltp(request: PredictionRequest):
     start_time = datetime.now()
     
     try:
+        # Normalizar símbolo automáticamente
+        original_symbol = request.symbol
+        normalized_symbol = normalize_symbol_for_xgboost(request.symbol)
+        
         # Verificar que los modelos estén cargados
         if not models:
             raise HTTPException(status_code=500, detail="Modelos no cargados")
@@ -219,7 +346,9 @@ async def predict_regime_sltp(request: PredictionRequest):
             debug_info={
                 "raw_sl_prediction": round(sl_pred, 2),
                 "raw_tp_prediction": round(tp_pred, 2),
-                "symbol": request.symbol,
+                "original_symbol": original_symbol,
+                "normalized_symbol": normalized_symbol,
+                "symbol_changed": original_symbol != normalized_symbol,
                 "feature_validation": "passed",
                 "timestamp": end_time.isoformat()
             }
@@ -253,6 +382,29 @@ async def predict_batch(requests: list[PredictionRequest]):
             })
     
     return {"results": results, "total_processed": len(results)}
+
+# Endpoint para testing de normalización de símbolos
+@app.get("/normalize-symbol/{symbol}")
+async def test_symbol_normalization(symbol: str):
+    """Endpoint para probar la normalización de símbolos"""
+    try:
+        original = symbol
+        normalized = normalize_symbol_for_xgboost(symbol)
+        
+        return {
+            "success": True,
+            "original_symbol": original,
+            "normalized_symbol": normalized,
+            "symbol_changed": original.upper() != normalized,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error en normalización: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "original_symbol": symbol
+        }
 
 # Endpoint de fallback para compatibilidad con EA actual
 @app.post("/xgboost/predict_sltp")
