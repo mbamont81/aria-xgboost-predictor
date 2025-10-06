@@ -223,14 +223,30 @@ def calculate_predictions(symbol: str, timeframe: str, features: dict) -> dict:
     sl_final = sl_base * tf_factor * volatility_factor * atr_factor * rsi_factor * bb_factor * lot_factor
     tp_final = tp_base * tf_factor * atr_factor * volatility_factor
     
-    # Asegurar que SL esté en el rango 50-400 pips para XAUUSD
+    # Aplicar rangos razonables pero permitir variación real
     if symbol == 'XAUUSD':
         sl_final = max(50.0, min(sl_final, 400.0))
-        tp_final = max(80.0, min(tp_final, 500.0))
+        # TP dinámico basado en SL y condiciones de mercado
+        risk_reward_base = 1.5  # Base risk-reward ratio
+        if regime == 'trending':
+            risk_reward_base = 2.0  # Mejor RR en trending
+        elif regime == 'volatile':
+            risk_reward_base = 1.2  # Más conservador en volatile
+        
+        tp_calculated = sl_final * risk_reward_base
+        tp_final = max(80.0, min(tp_calculated, 600.0))  # Rango más amplio
     else:
-        # Para otros símbolos, rangos apropiados
+        # Para otros símbolos, cálculo similar
         sl_final = max(20.0, min(sl_final, 200.0))
-        tp_final = max(40.0, min(tp_final, 300.0))
+        
+        risk_reward_base = 1.5
+        if regime == 'trending':
+            risk_reward_base = 2.0
+        elif regime == 'volatile':
+            risk_reward_base = 1.3
+            
+        tp_calculated = sl_final * risk_reward_base
+        tp_final = max(40.0, min(tp_calculated, 400.0))
     
     # Calcular confianza
     confidence_factors = [
@@ -241,10 +257,11 @@ def calculate_predictions(symbol: str, timeframe: str, features: dict) -> dict:
     ]
     confidence = sum(confidence_factors) / len(confidence_factors)
     
-    # DEBUG: Log detallado de cálculo para identificar problema
-    logger.info(f"🔧 DEBUG SL Calculation for {symbol}:")
+    # DEBUG: Log detallado de cálculo SL y TP
+    logger.info(f"🔧 DEBUG SL/TP Calculation for {symbol}:")
     logger.info(f"   Regime: {regime}")
     logger.info(f"   SL Base: {sl_base}")
+    logger.info(f"   TP Base: {tp_base}")
     logger.info(f"   TF Factor: {tf_factor}")
     logger.info(f"   Volatility Factor: {volatility_factor:.2f}")
     logger.info(f"   ATR Factor: {atr_factor:.2f}")
@@ -252,6 +269,9 @@ def calculate_predictions(symbol: str, timeframe: str, features: dict) -> dict:
     logger.info(f"   BB Factor: {bb_factor:.2f}")
     logger.info(f"   Lot Factor: {lot_factor:.2f}")
     logger.info(f"   SL Final: {sl_final:.2f}")
+    logger.info(f"   TP Calculated: {tp_calculated:.2f}")
+    logger.info(f"   Risk-Reward Ratio: {risk_reward_base:.1f}")
+    logger.info(f"   TP Final: {tp_final:.2f}")
     
     return {
         'sl_prediction': round(sl_final, 2),
