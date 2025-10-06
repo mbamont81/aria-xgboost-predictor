@@ -101,7 +101,7 @@ def normalize_symbol_for_xgboost(symbol: str) -> str:
     # PASO 4: Remover sufijos comunes de brokers (basado en logs de Render)
     
     # Casos especiales de sufijos compuestos
-    compound_suffixes = [".M", ".F", ".C"]
+    compound_suffixes = [".M", ".F", ".C", ".m", ".f", ".c"]
     for suffix in compound_suffixes:
         if suffix in normalized_symbol:
             normalized_symbol = normalized_symbol.replace(suffix, "")
@@ -112,13 +112,28 @@ def normalize_symbol_for_xgboost(symbol: str) -> str:
         normalized_symbol = normalized_symbol.replace("#", "")
         logger.info(f"🔄 Hash suffix removed: {original_symbol} → {normalized_symbol}")
     
-    # Sufijos simples al final
+    # Sufijos simples al final (incluyendo nuevos casos detectados)
     if len(normalized_symbol) > 6:
-        simple_suffixes = ["M", ".", "_", "C", "E", "F", "P"]
+        simple_suffixes = ["M", ".", "_", "C", "E", "F", "P", "c", "m"]
         last_char = normalized_symbol[-1]
         if last_char in simple_suffixes:
             normalized_symbol = normalized_symbol[:-1]
             logger.info(f"🔄 Simple suffix removed: {original_symbol} → {normalized_symbol}")
+    
+    # PASO 4.5: Mapeos específicos después de limpieza de sufijos
+    post_cleanup_mappings = {
+        "USTEC": "NAS100",  # USTEC.f → USTEC → NAS100
+        "EURJPY": "EURJPY", # Verificar si existe modelo
+        "EURNZD": "EURNZD", # Verificar si existe modelo  
+        "EURCHF": "EURCHF", # Verificar si existe modelo
+        "EURGBP": "EURGBP", # Verificar si existe modelo
+        "AUDCAD": "AUDCHF", # Mapeo conocido que ya funciona
+    }
+    
+    if normalized_symbol in post_cleanup_mappings:
+        final_symbol = post_cleanup_mappings[normalized_symbol]
+        logger.info(f"🔄 Post-cleanup mapping: {normalized_symbol} → {final_symbol}")
+        normalized_symbol = final_symbol
     
     # PASO 5: Aplicar mapeos finales después de limpieza
     if normalized_symbol in broker_mappings:
