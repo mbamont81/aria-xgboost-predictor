@@ -1,0 +1,51 @@
+{
+  "training_date": "2025-10-06T11:24:16.689502",
+  "broker": "Raw Trading Ltd",
+  "symbols_trained": 13,
+  "symbol_mapping": {
+    "TecDE30": "GER30",
+    "USTEC": "NAS100",
+    "JP225": "JPN225",
+    "XTIUSD": "OILUSD",
+    "XNGUSD": "NATGAS",
+    "XBRUSD": "BRENTUSD"
+  },
+  "new_symbols": [
+    "USDCHF",
+    "USDCAD",
+    "AUDUSD",
+    "NZDUSD",
+    "TecDE30",
+    "USTEC",
+    "JP225",
+    "XTIUSD",
+    "XNGUSD",
+    "XBRUSD",
+    "ADAUSD",
+    "XRPUSD",
+    "LTCUSD"
+  ],
+  "expected_impact": {
+    "error_500_reduction": "60-90%",
+    "fallback_reduction": "Significativa",
+    "affected_symbols": [
+      "USDCHF",
+      "USDCAD",
+      "AUDUSD",
+      "NZDUSD",
+      "TecDE30",
+      "USTEC",
+      "JP225",
+      "XTIUSD",
+      "XNGUSD",
+      "XBRUSD",
+      "ADAUSD",
+      "XRPUSD",
+      "LTCUSD"
+    ]
+  },
+  "deployment_files": [
+    "new_symbols_unified.pkl",
+    "individual_models/*.pkl"
+  ]
+}
