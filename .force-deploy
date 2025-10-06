@@ -1,0 +1,5 @@
+FORCE DEPLOYMENT - SYMBOL NORMALIZATION UPDATE
+timestamp: 2025-10-06T11:57:00
+commit: fd709a0
+feature: Server-side symbol normalization
+description: Added double protection layer for symbol normalization
