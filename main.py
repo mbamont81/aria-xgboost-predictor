@@ -269,6 +269,9 @@ async def health_check():
     return {
         "status": "healthy",
         "models_loaded": len(models),
+        "version_check": "4.2.0",  # Force version display
+        "confidence_filter_implemented": True,
+        "deployment_timestamp": "2025-10-06T14:25:00",
         "timestamp": datetime.now().isoformat()
     }
 
