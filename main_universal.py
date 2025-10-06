@@ -25,35 +25,48 @@ def normalize_symbol_for_xgboost(symbol: str) -> str:
         return ""
     
     original_symbol = symbol
-    normalized_symbol = symbol.upper()
+    normalized_symbol = symbol
     
-    # Mapeos específicos críticos
-    post_cleanup_mappings = {
+    # PASO 1: Mapeos específicos ANTES de uppercase (mantiene case sensitivity)
+    direct_mappings = {
         "GOLD#": "XAUUSD",  # GOLD# → XAUUSD
         "Gold": "XAUUSD",   # Gold → XAUUSD  
         "XAUUSD.s": "XAUUSD", # XAUUSD.s → XAUUSD
         "XAUUSD.p": "XAUUSD", # XAUUSD.p → XAUUSD
         "XAUUSD.m": "XAUUSD", # XAUUSD.m → XAUUSD
-        "XAUUSD.M": "XAUUSD", # XAUUSD.M → XAUUSD
-        "BTCUSDc": "BTCUSD",  # BTCUSDc → BTCUSD
-        "BTCUSDC": "BTCUSD",  # BTCUSDC → BTCUSD
-        "EURJPYc": "EURJPY",  # EURJPYc → EURJPY
-        "EURNZDc": "EURNZD",  # EURNZDc → EURNZD
-        "EURGBPc": "EURGBP",  # EURGBPc → EURGBP
-        "EURGBPC": "EURGBP",  # EURGBPC → EURGBP
-        "AUDCADc": "AUDCHF",  # AUDCADc → AUDCHF
-        "AUDCADC": "AUDCHF",  # AUDCADC → AUDCHF
-        "USDJPYm": "USDJPY",  # USDJPYm → USDJPY
-        "USDJPYM": "USDJPY",  # USDJPYM → USDJPY
-        "USDJPYp": "USDJPY",  # USDJPYp → USDJPY
-        "USDJPYP": "USDJPY",  # USDJPYP → USDJPY
-        "USTEC.f": "US500",   # USTEC.f → US500 (aproximación)
+        "USTEC.f": "US500",   # USTEC.f → US500
+    }
+    
+    if normalized_symbol in direct_mappings:
+        normalized_symbol = direct_mappings[normalized_symbol]
+        logger.info(f"🔄 Direct mapping: {original_symbol} → {normalized_symbol}")
+        return normalized_symbol
+    
+    # PASO 2: Remover sufijos comunes ANTES de uppercase
+    # Sufijos de una letra al final
+    if len(normalized_symbol) > 6 and normalized_symbol[-1].lower() in ['c', 'm', 'p', 'f']:
+        base_symbol = normalized_symbol[:-1]  # Quitar último caracter
+        normalized_symbol = base_symbol
+        logger.info(f"🔄 Suffix removed: {original_symbol} → {normalized_symbol}")
+    
+    # PASO 3: Ahora aplicar uppercase
+    normalized_symbol = normalized_symbol.upper()
+    
+    # PASO 4: Mapeos adicionales después de limpieza
+    post_cleanup_mappings = {
+        "AUDCAD": "AUDCHF",  # AUDCADc → AUDCAD → AUDCHF
+        "EURCHF": "EURCHF",  # EURCHFc → EURCHF → EURCHF (ya correcto)
+        "EURGBP": "EURGBP",  # EURGBPc → EURGBP → EURGBP (ya correcto)
+        "EURNZD": "EURNZD",  # EURNZDc → EURNZD → EURNZD (ya correcto)
+        "EURJPY": "EURJPY",  # EURJPYc → EURJPY → EURJPY (ya correcto)
+        "BTCUSD": "BTCUSD",  # BTCUSDc → BTCUSD → BTCUSD (ya correcto)
+        "USDJPY": "USDJPY",  # USDJPYm/p → USDJPY → USDJPY (ya correcto)
     }
     
     if normalized_symbol in post_cleanup_mappings:
         final_symbol = post_cleanup_mappings[normalized_symbol]
-        if original_symbol != final_symbol:
-            logger.info(f"🔄 Symbol mapping: {original_symbol} → {final_symbol}")
+        if original_symbol.upper() != final_symbol:
+            logger.info(f"🔄 Post-cleanup mapping: {original_symbol} → {final_symbol}")
         normalized_symbol = final_symbol
     
     return normalized_symbol
