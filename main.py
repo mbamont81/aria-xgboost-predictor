@@ -49,54 +49,45 @@ def normalize_symbol_for_xgboost(symbol: str) -> str:
         "AU200": "AUS200",
         "GOLD": "XAUUSD",
         "SILVER": "XAGUSD",
-        "BRENT": "OILUSD",
-        "WTI": "OILUSD"
+        "OIL": "OILUSD",
+        "BRENT": "OILUSD"
     }
     
-    # Aplicar mapeo directo si existe
     if normalized_symbol in broker_mappings:
         normalized_symbol = broker_mappings[normalized_symbol]
-        logger.info(f"🔄 Symbol mapping: {original_symbol} → {normalized_symbol}")
-        return normalized_symbol
+        logger.info(f"🔄 Broker mapping: {original_symbol} → {normalized_symbol}")
     
-    # PASO 2: Normalización de prefijos comunes
+    # PASO 2: Mapeos de prefijos
     prefix_mappings = {
-        "XAUUSD": ["GOLD", "XAU"],
-        "XAGUSD": ["SILVER", "XAG"], 
-        "OILUSD": ["OIL", "CRUDE", "WTI", "BRENT", "XTI", "XBR"],
-        "NATGAS": ["GAS", "NGAS", "XNG"],
-        "BTCUSD": ["BTC", "BITCOIN"],
-        "ETHUSD": ["ETH", "ETHEREUM"]
+        "FX": "",      # FXEURUSD → EURUSD
+        "CFD": "",     # CFDGOLD → GOLD
+        "SPOT": "",    # SPOTGOLD → GOLD
+        "CASH": ""     # CASHEURUSD → EURUSD
     }
     
-    for standard_symbol, prefixes in prefix_mappings.items():
-        for prefix in prefixes:
-            if normalized_symbol.startswith(prefix):
-                normalized_symbol = standard_symbol
-                logger.info(f"🔄 Prefix normalization: {original_symbol} → {normalized_symbol}")
-                return normalized_symbol
+    for prefix, replacement in prefix_mappings.items():
+        if normalized_symbol.startswith(prefix):
+            normalized_symbol = normalized_symbol.replace(prefix, replacement, 1)
+            logger.info(f"🔄 Prefix removed: {original_symbol} → {normalized_symbol}")
     
-    # PASO 3: Normalización de índices por región
+    # PASO 3: Mapeos de índices específicos
     index_mappings = {
-        "GER30": ["GER", "DAX", "DE30", "DE40", "GERMANY"],
-        "NAS100": ["NAS", "NASDAQ", "US100", "USTEC"],
-        "SPX500": ["SPX", "SP500", "US500", "SPY"],
-        "DOW30": ["DOW", "DJI", "US30", "DJIA"],
-        "JPN225": ["JPN", "NIKKEI", "JP225", "N225"],
-        "FTSE100": ["FTSE", "UK100", "UKX"],
-        "CAC40": ["CAC", "FR40", "FRA40"],
-        "IBEX35": ["IBEX", "ES35", "SPA35"],
-        "MIB40": ["MIB", "IT40", "ITA40"],
-        "HSI50": ["HSI", "HK50", "HKG50"],
-        "AUS200": ["AUS", "AU200", "ASX200"]
+        "GER30": "DE30",
+        "GER40": "DE40", 
+        "FRA40": "FR40",
+        "ESP35": "ES35",
+        "ITA40": "IT40",
+        "NED25": "NL25",
+        "SWI20": "CH20",
+        "AUS200": "AU200",
+        "HKG50": "HK50",
+        "JPN225": "JP225",
+        "SING30": "SG30"
     }
     
-    for standard_symbol, variations in index_mappings.items():
-        for variation in variations:
-            if variation in normalized_symbol:
-                normalized_symbol = standard_symbol
-                logger.info(f"🔄 Index normalization: {original_symbol} → {normalized_symbol}")
-                return normalized_symbol
+    if normalized_symbol in index_mappings:
+        normalized_symbol = index_mappings[normalized_symbol]
+        logger.info(f"🔄 Index mapping: {original_symbol} → {normalized_symbol}")
     
     # PASO 4: Remover sufijos comunes de brokers (basado en logs de Render)
     
@@ -135,24 +126,11 @@ def normalize_symbol_for_xgboost(symbol: str) -> str:
         logger.info(f"🔄 Post-cleanup mapping: {normalized_symbol} → {final_symbol}")
         normalized_symbol = final_symbol
     
-    # PASO 5: Aplicar mapeos finales después de limpieza
-    if normalized_symbol in broker_mappings:
-        final_symbol = broker_mappings[normalized_symbol]
-        logger.info(f"🔄 Final mapping: {normalized_symbol} → {final_symbol}")
-        normalized_symbol = final_symbol
-    
-    # Log solo si hubo cambio
+    # PASO 5: Validación final
     if normalized_symbol != original_symbol:
         logger.info(f"✅ Symbol normalized: {original_symbol} → {normalized_symbol}")
     
     return normalized_symbol
-
-# Inicializar FastAPI
-app = FastAPI(
-    title="Aria Regime-Aware XGBoost API",
-    description="API para predicciones XGBoost especializadas por régimen de mercado",
-    version="1.0.0"
-)
 
 # Estructura de request
 class PredictionRequest(BaseModel):
@@ -238,6 +216,8 @@ def validate_features(features: np.ndarray) -> bool:
     except:
         return False
 
+app = FastAPI()
+
 @app.on_event("startup")
 async def startup_event():
     """Cargar modelos al iniciar la aplicación"""
@@ -251,15 +231,14 @@ async def root():
     return {
         "message": "Aria Regime-Aware XGBoost API",
         "status": "active",
-        "version": "4.2.0",  # Updated for confidence filtering
-        "deployment_time": "2025-10-06 13:50:00",
+        "version": "4.2.0-SIMPLIFIED",  # Clear version indicator
+        "deployment_time": "2025-10-06 18:25:00",
         "models_loaded": len(models),
         "symbol_normalization": "enabled",
-        "normalization_active": True,
-        "confidence_filtering": "enabled",  # NEW: Confidence filter active
-        "confidence_threshold": "90%",     # NEW: Threshold value
-        "expected_win_rate": "62.3%",      # NEW: Expected improvement
-        "improvement": "+8.5% vs unfiltered",  # NEW: Quantified benefit
+        "confidence_filtering": "enabled",  # Confidence filter active
+        "confidence_threshold": "90%",     # Threshold value
+        "expected_win_rate": "62.3%",      # Expected improvement
+        "improvement": "+8.5% vs unfiltered",
         "available_endpoints": ["/predict", "/health", "/models-info", "/normalize-symbol"]
     }
 
@@ -269,24 +248,15 @@ async def health_check():
     return {
         "status": "healthy",
         "models_loaded": len(models),
-        "version_check": "4.2.0",  # Force version display
+        "version_check": "4.2.0-SIMPLIFIED",
         "confidence_filter_implemented": True,
-        "deployment_timestamp": "2025-10-06T14:25:00",
+        "deployment_timestamp": "2025-10-06T18:25:00",
         "timestamp": datetime.now().isoformat()
-    }
-
-@app.get("/models-info")
-async def models_info():
-    """Información sobre modelos cargados"""
-    return {
-        "models_loaded": list(models.keys()),
-        "feature_names": feature_names,
-        "supported_regimes": ["volatile", "ranging", "trending"]
     }
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict_regime_sltp(request: PredictionRequest):
-    """Endpoint principal para predicciones regime-aware"""
+    """Endpoint principal para predicciones regime-aware con filtro de confidence"""
     start_time = datetime.now()
     
     try:
@@ -317,41 +287,34 @@ async def predict_regime_sltp(request: PredictionRequest):
         # 1. Predecir régimen
         regime_classifier = models.get('regime_classifier')
         if not regime_classifier:
-            raise HTTPException(status_code=500, detail="Clasificador de regímenes no disponible")
+            raise HTTPException(status_code=500, detail="Clasificador de régimen no encontrado")
         
-        regime_probs = regime_classifier.predict_proba(features_array)[0]
-        regime_classes = regime_classifier.classes_
+        regime_pred = regime_classifier.predict(features_array)[0]
+        regime_proba = regime_classifier.predict_proba(features_array)[0]
         
-        # Crear diccionario de weights
-        regime_weights = {}
-        for i, regime_class in enumerate(regime_classes):
-            regime_weights[regime_class] = float(regime_probs[i])
+        regimes = ['volatile', 'ranging', 'trending']
+        detected_regime = regimes[regime_pred]
+        regime_confidence = max(regime_proba)
+        regime_weights = dict(zip(regimes, regime_proba))
         
-        # Régimen detectado y confianza
-        detected_regime = regime_classes[np.argmax(regime_probs)]
-        regime_confidence = float(np.max(regime_probs))
-        
-        # 2. Predecir SL/TP con modelo especializado
+        # 2. Predecir SL y TP usando modelos especializados
         sl_model = models.get(f'{detected_regime}_sl')
         tp_model = models.get(f'{detected_regime}_tp')
         
         if not sl_model or not tp_model:
-            raise HTTPException(status_code=500, detail=f"Modelos para régimen {detected_regime} no disponibles")
+            raise HTTPException(status_code=500, detail=f"Modelos para régimen {detected_regime} no encontrados")
         
-        # Predicciones individuales
-        sl_pred = float(sl_model.predict(features_array)[0])
-        tp_pred = float(tp_model.predict(features_array)[0])
+        sl_pred = sl_model.predict(features_array)[0]
+        tp_pred = tp_model.predict(features_array)[0]
         
-        # 3. Weighted ensemble (opcional - por ahora usamos modelo detectado)
-        # En el futuro se puede implementar ensemble ponderado
+        # Convertir a pips (ajustar según símbolo)
+        pip_factor = 10000 if "JPY" not in normalized_symbol else 100
+        sl_pips = abs(sl_pred) * pip_factor
+        tp_pips = abs(tp_pred) * pip_factor
         
-        # 4. Post-procesamiento y validación
-        sl_pips = max(5.0, min(sl_pred, 200.0))  # Límites razonables
-        tp_pips = max(10.0, min(tp_pred, 500.0))
-        
-        # Asegurar ratio mínimo TP/SL
-        if tp_pips / sl_pips < 1.2:
-            tp_pips = sl_pips * 1.5
+        # Aplicar límites razonables
+        sl_pips = max(10, min(sl_pips, 500))
+        tp_pips = max(15, min(tp_pips, 1000))
         
         # Calcular tiempo de procesamiento
         end_time = datetime.now()
@@ -371,7 +334,7 @@ async def predict_regime_sltp(request: PredictionRequest):
         
         logger.info(f"✅ Predicción aceptada: confidence {confidence_percentage}% >= {confidence_threshold}%")
         
-        # 5. Preparar response
+        # Preparar response
         response = PredictionResponse(
             success=True,
             detected_regime=detected_regime,
@@ -396,62 +359,29 @@ async def predict_regime_sltp(request: PredictionRequest):
         )
         
         # Log para monitoring
-        logger.info(f"Prediction: {detected_regime} (conf={regime_confidence:.2f}) SL={sl_pips} TP={tp_pips}")
+        logger.info(f"✅ Prediction: {detected_regime} (conf={confidence_percentage}%) SL={sl_pips} TP={tp_pips}")
         
         return response
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error en predicción: {e}")
+        logger.error(f"❌ Error en predicción: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-@app.post("/predict-batch")
-async def predict_batch(requests: list[PredictionRequest]):
-    """Endpoint para predicciones en lote"""
-    results = []
-    
-    for request in requests:
-        try:
-            result = await predict_regime_sltp(request)
-            results.append(result)
-        except Exception as e:
-            results.append({
-                "success": False,
-                "error": str(e),
-                "symbol": request.symbol
-            })
-    
-    return {"results": results, "total_processed": len(results)}
-
-# Endpoint para testing de normalización de símbolos
 @app.get("/normalize-symbol/{symbol}")
-async def test_symbol_normalization(symbol: str):
-    """Endpoint para probar la normalización de símbolos"""
+async def normalize_symbol_endpoint(symbol: str):
+    """Endpoint para normalizar símbolos individualmente"""
     try:
-        original = symbol
         normalized = normalize_symbol_for_xgboost(symbol)
-        
         return {
-            "success": True,
-            "original_symbol": original,
+            "original_symbol": symbol,
             "normalized_symbol": normalized,
-            "symbol_changed": original.upper() != normalized,
+            "symbol_changed": symbol != normalized,
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
-        logger.error(f"Error en normalización: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "original_symbol": symbol
-        }
-
-# Endpoint de fallback para compatibilidad con EA actual
-@app.post("/xgboost/predict_sltp")
-async def predict_sltp_legacy(request: PredictionRequest):
-    """Endpoint legacy para compatibilidad"""
-    return await predict_regime_sltp(request)
+        raise HTTPException(status_code=500, detail=f"Error normalizando símbolo: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
