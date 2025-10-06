@@ -311,8 +311,31 @@ async def predict(request: PredictionRequest):
         return PredictionResponse(**result)
         
     except Exception as e:
-        logger.error(f"❌ Error en predicción: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # CAPTURAR ERROR COMPLETO
+        import traceback
+        error_detail = str(e) if e else "Unknown error"
+        stack_trace = traceback.format_exc()
+        
+        logger.error(f"❌ Error en predicción: {error_detail}")
+        logger.error(f"📋 Stack trace completo:\n{stack_trace}")
+        
+        # Devolver respuesta útil en lugar de fallar
+        return {
+            "success": False,
+            "sl_pips": 50.0,  # Valores por defecto
+            "tp_pips": 75.0,
+            "detected_regime": "fallback",
+            "regime_confidence": 0.0,
+            "model_used": "emergency_fallback",
+            "processing_time_ms": 0,
+            "debug_info": {
+                "error": error_detail,
+                "symbol": request.symbol,
+                "timeframe": request.timeframe,
+                "timestamp": datetime.now().isoformat(),
+                "stack_trace": stack_trace[:500]  # Primeros 500 chars
+            }
+        }
 
 @app.get("/symbols")
 async def get_symbols():
