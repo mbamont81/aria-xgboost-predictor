@@ -18,6 +18,38 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Función de normalización de símbolos
+def normalize_symbol_for_xgboost(symbol: str) -> str:
+    """Normaliza símbolos de broker a formato estándar para XGBoost"""
+    if not symbol:
+        return ""
+    
+    original_symbol = symbol
+    normalized_symbol = symbol.upper()
+    
+    # Mapeos específicos críticos
+    post_cleanup_mappings = {
+        "GOLD#": "XAUUSD",  # GOLD# → XAUUSD
+        "Gold": "XAUUSD",   # Gold → XAUUSD  
+        "XAUUSD.s": "XAUUSD", # XAUUSD.s → XAUUSD
+        "XAUUSD.p": "XAUUSD", # XAUUSD.p → XAUUSD
+        "XAUUSD.m": "XAUUSD", # XAUUSD.m → XAUUSD
+        "BTCUSDc": "BTCUSD",  # BTCUSDc → BTCUSD
+        "EURJPYc": "EURJPY",  # EURJPYc → EURJPY (si existe modelo)
+        "EURNZDc": "EURNZD",  # EURNZDc → EURNZD (si existe modelo)
+        "AUDCADc": "AUDCHF",  # AUDCADc → AUDCHF
+        "USDJPYm": "USDJPY",  # USDJPYm → USDJPY
+        "USTEC.f": "US500",   # USTEC.f → US500 (aproximación)
+    }
+    
+    if normalized_symbol in post_cleanup_mappings:
+        final_symbol = post_cleanup_mappings[normalized_symbol]
+        if original_symbol != final_symbol:
+            logger.info(f"🔄 Symbol mapping: {original_symbol} → {final_symbol}")
+        normalized_symbol = final_symbol
+    
+    return normalized_symbol
+
 # FastAPI app
 app = FastAPI(
     title="ARIA XGBoost Universal Predictor",
@@ -284,12 +316,22 @@ async def predict(request: PredictionRequest):
     try:
         logger.info(f"📡 Predicción solicitada: {request.symbol} {request.timeframe}")
         
-        # Verificar que el símbolo esté soportado
-        if request.symbol not in AVAILABLE_SYMBOLS:
+        # NORMALIZAR SÍMBOLO ANTES DE VERIFICAR DISPONIBILIDAD
+        original_symbol = request.symbol
+        normalized_symbol = normalize_symbol_for_xgboost(request.symbol)
+        
+        if original_symbol != normalized_symbol:
+            logger.info(f"🔄 Normalizando {original_symbol} → {normalized_symbol}")
+        
+        # Verificar que el símbolo NORMALIZADO esté soportado
+        if normalized_symbol not in AVAILABLE_SYMBOLS:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Símbolo {request.symbol} no soportado. Disponibles: {AVAILABLE_SYMBOLS}"
+                detail=f"Símbolo {normalized_symbol} (normalizado de {original_symbol}) no soportado. Disponibles: {AVAILABLE_SYMBOLS}"
             )
+        
+        # Usar símbolo normalizado para el resto del procesamiento
+        request.symbol = normalized_symbol
         
         # Preparar features
         features = {
