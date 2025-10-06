@@ -34,11 +34,19 @@ def normalize_symbol_for_xgboost(symbol: str) -> str:
         "XAUUSD.s": "XAUUSD", # XAUUSD.s → XAUUSD
         "XAUUSD.p": "XAUUSD", # XAUUSD.p → XAUUSD
         "XAUUSD.m": "XAUUSD", # XAUUSD.m → XAUUSD
+        "XAUUSD.M": "XAUUSD", # XAUUSD.M → XAUUSD
         "BTCUSDc": "BTCUSD",  # BTCUSDc → BTCUSD
-        "EURJPYc": "EURJPY",  # EURJPYc → EURJPY (si existe modelo)
-        "EURNZDc": "EURNZD",  # EURNZDc → EURNZD (si existe modelo)
+        "BTCUSDC": "BTCUSD",  # BTCUSDC → BTCUSD
+        "EURJPYc": "EURJPY",  # EURJPYc → EURJPY
+        "EURNZDc": "EURNZD",  # EURNZDc → EURNZD
+        "EURGBPc": "EURGBP",  # EURGBPc → EURGBP
+        "EURGBPC": "EURGBP",  # EURGBPC → EURGBP
         "AUDCADc": "AUDCHF",  # AUDCADc → AUDCHF
+        "AUDCADC": "AUDCHF",  # AUDCADC → AUDCHF
         "USDJPYm": "USDJPY",  # USDJPYm → USDJPY
+        "USDJPYM": "USDJPY",  # USDJPYM → USDJPY
+        "USDJPYp": "USDJPY",  # USDJPYp → USDJPY
+        "USDJPYP": "USDJPY",  # USDJPYP → USDJPY
         "USTEC.f": "US500",   # USTEC.f → US500 (aproximación)
     }
     
@@ -361,22 +369,18 @@ async def predict(request: PredictionRequest):
         logger.error(f"❌ Error en predicción: {error_detail}")
         logger.error(f"📋 Stack trace completo:\n{stack_trace}")
         
-        # Devolver respuesta útil en lugar de fallar
+        # Devolver respuesta con estructura correcta (evitar ResponseValidationError)
         return {
+            "sl_prediction": 50.0,  # Valores por defecto
+            "tp_prediction": 75.0,
+            "confidence": 0.0,
+            "risk_reward_ratio": 1.5,
+            "symbol": request.symbol,
+            "timeframe": request.timeframe,
+            "regime": "fallback",
+            "timestamp": datetime.now().isoformat(),
             "success": False,
-            "sl_pips": 50.0,  # Valores por defecto
-            "tp_pips": 75.0,
-            "detected_regime": "fallback",
-            "regime_confidence": 0.0,
-            "model_used": "emergency_fallback",
-            "processing_time_ms": 0,
-            "debug_info": {
-                "error": error_detail,
-                "symbol": request.symbol,
-                "timeframe": request.timeframe,
-                "timestamp": datetime.now().isoformat(),
-                "stack_trace": stack_trace[:500]  # Primeros 500 chars
-            }
+            "error": error_detail
         }
 
 @app.get("/symbols")
