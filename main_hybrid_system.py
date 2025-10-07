@@ -224,7 +224,19 @@ async def predict(request: PredictionRequest):
         
         regime_confidence = max(regime_proba) * 100
         
+        # Log symbol information
+        if request.symbol != normalized_symbol:
+            logger.info(f"🔄 Symbol normalized: {request.symbol} → {normalized_symbol}")
+        
+        logger.info(f"📊 Processing prediction for {normalized_symbol}")
         logger.info(f"🎯 Regime detected: {detected_regime} ({regime_confidence:.1f}% confidence)")
+        
+        # Check if symbol is supported
+        supported_symbols = ["BTCUSD", "EURUSD", "GBPUSD", "XAUUSD"]
+        if normalized_symbol not in supported_symbols:
+            logger.warning(f"⚠️ Symbol {normalized_symbol} not in optimized config, using XAUUSD defaults")
+        else:
+            logger.info(f"✅ Symbol {normalized_symbol} supported with optimized config")
         
         # Calcular predicciones usando reglas mejoradas por régimen
         features_dict = {
@@ -235,13 +247,16 @@ async def predict(request: PredictionRequest):
             'breakout_frequency': request.breakout_frequency
         }
         
+        # Log key features that affect predictions
+        logger.info(f"🔧 Key features: ATR={request.atr_percentile_100:.1f}, Volume_Imbalance={request.volume_imbalance:.3f}, Price_Accel={request.price_acceleration:.3f}")
+        
         predictions = calculate_regime_based_predictions(normalized_symbol, detected_regime, features_dict)
         
         # Calcular tiempo de procesamiento
         end_time = datetime.now()
         processing_time = (end_time - start_time).total_seconds() * 1000
         
-        logger.info(f"✅ Prediction: {detected_regime} SL={predictions['sl_pips']} TP={predictions['tp_pips']}")
+        logger.info(f"✅ Prediction for {normalized_symbol}: {detected_regime} SL={predictions['sl_pips']} TP={predictions['tp_pips']} (confidence: {regime_confidence:.1f}%)")
         
         return PredictionResponse(
             success=True,
