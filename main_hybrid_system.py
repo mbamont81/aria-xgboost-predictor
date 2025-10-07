@@ -378,13 +378,17 @@ async def predict_legacy(
         # Usar la misma lógica de predicción
         result = await predict_full(request_data)
         
-        # Formato de respuesta compatible
+        # Formato de respuesta compatible con EA
         return {
             "success": result.success,
             "sl_pips": result.sl_pips,
             "tp_pips": result.tp_pips,
-            "confidence": result.overall_confidence,
+            "sl_points": result.sl_pips,          # ← Campo que busca el EA
+            "tp_points": result.tp_pips,          # ← Campo que busca el EA
+            "confidence": result.overall_confidence / 100.0,  # ← Convertir a decimal
             "regime": result.detected_regime,
+            "market_regime": result.detected_regime,  # ← Campo que busca el EA
+            "risk_reward_ratio": result.tp_pips / max(result.sl_pips, 1.0),  # ← Calcular RR
             "model": result.model_used
         }
         
@@ -394,8 +398,12 @@ async def predict_legacy(
             "success": False,
             "sl_pips": 100.0,
             "tp_pips": 200.0,
-            "confidence": 50.0,
+            "sl_points": 100.0,
+            "tp_points": 200.0,
+            "confidence": 0.50,  # Decimal format
             "regime": "fallback",
+            "market_regime": "fallback",
+            "risk_reward_ratio": 2.0,
             "model": "error_fallback"
         }
 
