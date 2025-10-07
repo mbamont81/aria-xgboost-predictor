@@ -11,6 +11,21 @@ import joblib
 import os
 from datetime import datetime
 import logging
+# Simplified approach - no psycopg2 import at startup
+PSYCOPG2_AVAILABLE = False
+
+def check_psycopg2_availability():
+    """Check if psycopg2 is available when needed"""
+    global PSYCOPG2_AVAILABLE
+    try:
+        import psycopg2
+        PSYCOPG2_AVAILABLE = True
+        logger.info("✅ psycopg2 available for database operations")
+        return True
+    except ImportError as e:
+        PSYCOPG2_AVAILABLE = False
+        logger.warning(f"⚠️ psycopg2 not available: {e}")
+        return False
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +33,45 @@ logger = logging.getLogger(__name__)
 
 # Variables globales
 models = {}
+
+# Database functions (only if psycopg2 is available)
+if PSYCOPG2_AVAILABLE:
+    def get_database_connection():
+        """Obtener conexión a PostgreSQL"""
+        try:
+            database_url = os.getenv('DATABASE_URL', 'postgresql://test:test@localhost:5432/testdb')
+            conn = psycopg2.connect(database_url)
+            logger.info("✅ Database connection successful")
+            return conn
+        except Exception as e:
+            logger.error(f"❌ Database connection error: {e}")
+            return None
+
+    def test_database_integration():
+        """Probar integración con database"""
+        try:
+            conn = get_database_connection()
+            if conn:
+                cursor = conn.cursor()
+                # Test simple query
+                cursor.execute("SELECT 1")
+                result = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                logger.info("✅ Database test query successful")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"❌ Database test failed: {e}")
+            return False
+else:
+    def get_database_connection():
+        logger.warning("⚠️ Database integration disabled - psycopg2 not available")
+        return None
+    
+    def test_database_integration():
+        logger.warning("⚠️ Database test skipped - psycopg2 not available")
+        return False
 
 # Configuración mejorada por régimen - EXPANDIDA
 REGIME_CONFIG = {
@@ -188,6 +242,31 @@ class PredictionResponse(BaseModel):
     overall_confidence: float
     model_used: str
     processing_time_ms: float
+
+# Training data structures (only if psycopg2 is available)
+if PSYCOPG2_AVAILABLE:
+    class TrainingDataRequest(BaseModel):
+        symbol: str
+        trade_type: int  # 0=buy, 1=sell
+        entry_price: float
+        exit_price: float
+        profit: float
+        open_time: str
+        close_time: str
+        atr_at_open: float
+        rsi_at_open: float
+        ma50_at_open: float
+        ma200_at_open: float
+        volatility_at_open: float
+        xgboost_confidence: float
+        market_regime: str
+        was_xgboost_used: bool
+
+    class TrainingDataResponse(BaseModel):
+        success: bool
+        message: str
+        trades_stored: int
+        database_available: bool
 
 def normalize_symbol_for_xgboost(symbol: str) -> str:
     """Normaliza símbolos de broker a formato estándar"""
