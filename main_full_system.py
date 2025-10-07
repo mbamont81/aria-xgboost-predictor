@@ -628,6 +628,16 @@ async def predict_regime_sltp(request: PredictionRequest):
             logger.error(f"Available keys: {available_keys}")
             raise HTTPException(status_code=500, detail=f"Modelos para régimen {detected_regime} no encontrados. Available: {available_keys}")
         
+        # Force CPU-only predictions to avoid gpu_id attribute error
+        try:
+            # Disable GPU for predictions
+            if hasattr(sl_model, 'set_params'):
+                sl_model.set_params(tree_method='hist', device='cpu')
+            if hasattr(tp_model, 'set_params'):
+                tp_model.set_params(tree_method='hist', device='cpu')
+        except:
+            pass  # Ignore if set_params not available
+            
         sl_pred = sl_model.predict(features_array)[0]
         tp_pred = tp_model.predict(features_array)[0]
         
