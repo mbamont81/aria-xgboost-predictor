@@ -308,6 +308,16 @@ async def startup_event():
     else:
         logger.error("❌ Failed to load regime classifier")
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint para el EA"""
+    return {
+        "status": "healthy",
+        "service": "ARIA Hybrid System",
+        "models_loaded": len(models),
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/")
 async def root():
     """Endpoint principal"""
@@ -340,8 +350,57 @@ async def root():
         }
     }
 
+@app.get("/predict")
+async def predict_legacy(
+    symbol: str = "XAUUSD",
+    lot_size: float = 0.01,
+    atr: float = 50.0,
+    trend_strength: float = 0.0
+):
+    """Endpoint legacy compatible con formato antiguo del EA"""
+    try:
+        logger.info(f"🔄 Legacy request: {symbol}, ATR={atr}, trend={trend_strength}")
+        
+        # Convertir formato antiguo a nuevo
+        request_data = PredictionRequest(
+            symbol=symbol,
+            atr_percentile_100=atr,
+            rsi_std_20=0.5,  # Valor por defecto
+            price_acceleration=trend_strength,
+            candle_body_ratio_mean=0.7,  # Valor por defecto
+            breakout_frequency=0.3,  # Valor por defecto
+            volume_imbalance=0.1,  # Valor por defecto
+            rolling_autocorr_20=0.2,  # Valor por defecto
+            hurst_exponent_50=0.5,  # Valor por defecto
+            timeframe="M1"
+        )
+        
+        # Usar la misma lógica de predicción
+        result = await predict_full(request_data)
+        
+        # Formato de respuesta compatible
+        return {
+            "success": result.success,
+            "sl_pips": result.sl_pips,
+            "tp_pips": result.tp_pips,
+            "confidence": result.overall_confidence,
+            "regime": result.detected_regime,
+            "model": result.model_used
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error in legacy endpoint: {e}")
+        return {
+            "success": False,
+            "sl_pips": 100.0,
+            "tp_pips": 200.0,
+            "confidence": 50.0,
+            "regime": "fallback",
+            "model": "error_fallback"
+        }
+
 @app.post("/predict", response_model=PredictionResponse)
-async def predict(request: PredictionRequest):
+async def predict_full(request: PredictionRequest):
     """Predicción usando clasificador ML + reglas por régimen"""
     
     try:
