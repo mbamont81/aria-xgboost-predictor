@@ -517,11 +517,24 @@ async def predict_regime_sltp(request: PredictionRequest):
         regime_weights = dict(zip(regimes, regime_proba))
         
         # 2. Predecir SL y TP usando modelos especializados
+        # DEBUG: Log available models and keys
+        logger.info(f"🔍 Available models: {list(models.keys())}")
+        logger.info(f"🎯 Looking for regime: {detected_regime}")
+        
         sl_model = models.get(f'{detected_regime}_sl')
         tp_model = models.get(f'{detected_regime}_tp')
         
+        # If not found, try alternative key formats
+        if not sl_model:
+            sl_model = models.get(f'xgb_{detected_regime}_sl')
+        if not tp_model:
+            tp_model = models.get(f'xgb_{detected_regime}_tp')
+        
         if not sl_model or not tp_model:
-            raise HTTPException(status_code=500, detail=f"Modelos para régimen {detected_regime} no encontrados")
+            available_keys = list(models.keys())
+            logger.error(f"❌ Models not found for regime {detected_regime}")
+            logger.error(f"Available keys: {available_keys}")
+            raise HTTPException(status_code=500, detail=f"Modelos para régimen {detected_regime} no encontrados. Available: {available_keys}")
         
         sl_pred = sl_model.predict(features_array)[0]
         tp_pred = tp_model.predict(features_array)[0]
