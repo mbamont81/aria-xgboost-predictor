@@ -475,9 +475,26 @@ app = FastAPI()
 @app.on_event("startup")
 async def startup_event():
     """Cargar modelos al iniciar la aplicación"""
+    logger.info("🚀 STARTING ARIA XGBOOST PREDICTOR")
+    logger.info("🔍 Attempting to load models...")
+    
+    # Check if models directory exists
+    if os.path.exists("models"):
+        model_files = [f for f in os.listdir("models") if f.endswith('.pkl')]
+        logger.info(f"📁 Found {len(model_files)} PKL files in models directory")
+        logger.info(f"🔍 PKL files: {model_files[:10]}...")  # Show first 10
+    else:
+        logger.error("❌ Models directory not found!")
+    
     success = load_models()
+    logger.info(f"📊 Model loading result: {success}")
+    logger.info(f"📊 Models loaded: {list(models.keys())}")
+    logger.info(f"📊 Total models count: {len(models)}")
+    
     if not success:
-        logger.error("Error al cargar modelos - API podría no funcionar correctamente")
+        logger.error("❌ Error al cargar modelos - API podría no funcionar correctamente")
+    else:
+        logger.info("✅ Model loading completed successfully")
 
 @app.get("/")
 async def root():
