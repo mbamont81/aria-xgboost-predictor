@@ -234,14 +234,91 @@ def load_regime_classifier():
         logger.error(f"❌ Error loading regime classifier: {e}")
         return False
 
+def get_symbol_pip_characteristics(symbol: str) -> dict:
+    """Obtener características reales de pip para cada símbolo"""
+    
+    # Configuración real de pips por símbolo (basado en estándares del mercado)
+    pip_config = {
+        # Forex Majors (4-5 dígitos, pip = 0.0001)
+        'EURUSD': {'pip_value': 0.0001, 'typical_range': [20, 200]},
+        'GBPUSD': {'pip_value': 0.0001, 'typical_range': [25, 250]},
+        'AUDUSD': {'pip_value': 0.0001, 'typical_range': [20, 200]},
+        'NZDUSD': {'pip_value': 0.0001, 'typical_range': [20, 200]},
+        'USDCAD': {'pip_value': 0.0001, 'typical_range': [20, 200]},
+        'USDCHF': {'pip_value': 0.0001, 'typical_range': [20, 200]},
+        
+        # JPY Pairs (2-3 dígitos, pip = 0.01)
+        'USDJPY': {'pip_value': 0.01, 'typical_range': [20, 200]},
+        'EURJPY': {'pip_value': 0.01, 'typical_range': [30, 300]},
+        'GBPJPY': {'pip_value': 0.01, 'typical_range': [35, 350]},
+        'AUDJPY': {'pip_value': 0.01, 'typical_range': [30, 300]},
+        'CADJPY': {'pip_value': 0.01, 'typical_range': [25, 250]},
+        'CHFJPY': {'pip_value': 0.01, 'typical_range': [30, 300]},
+        
+        # Cross Pairs (4-5 dígitos, pip = 0.0001)
+        'EURGBP': {'pip_value': 0.0001, 'typical_range': [15, 150]},
+        'EURAUD': {'pip_value': 0.0001, 'typical_range': [25, 250]},
+        'EURCAD': {'pip_value': 0.0001, 'typical_range': [25, 250]},
+        'EURCHF': {'pip_value': 0.0001, 'typical_range': [20, 200]},
+        'EURNZD': {'pip_value': 0.0001, 'typical_range': [30, 300]},
+        'GBPAUD': {'pip_value': 0.0001, 'typical_range': [30, 300]},
+        'GBPCAD': {'pip_value': 0.0001, 'typical_range': [30, 300]},
+        'GBPNZD': {'pip_value': 0.0001, 'typical_range': [35, 350]},
+        'AUDCHF': {'pip_value': 0.0001, 'typical_range': [25, 250]},
+        'CADCHF': {'pip_value': 0.0001, 'typical_range': [20, 200]},
+        
+        # Metals (1-2 dígitos, pip = 0.01 o 0.1)
+        'XAUUSD': {'pip_value': 0.01, 'typical_range': [50, 500]},  # Gold
+        'XAGUSD': {'pip_value': 0.01, 'typical_range': [50, 500]},  # Silver
+        'XPTUSD': {'pip_value': 0.01, 'typical_range': [100, 1000]}, # Platinum
+        
+        # Crypto (variable, depende del broker)
+        'BTCUSD': {'pip_value': 0.01, 'typical_range': [100, 1000]},
+        'ETHUSD': {'pip_value': 0.01, 'typical_range': [50, 500]},
+        'LTCUSD': {'pip_value': 0.01, 'typical_range': [50, 500]},
+        'ADAUSD': {'pip_value': 0.0001, 'typical_range': [50, 500]},
+        'SOLUSD': {'pip_value': 0.01, 'typical_range': [100, 1000]},
+        'XRPUSD': {'pip_value': 0.0001, 'typical_range': [50, 500]},
+        
+        # Indices (variable, generalmente puntos enteros)
+        'US30': {'pip_value': 1.0, 'typical_range': [50, 500]},
+        'US500': {'pip_value': 0.1, 'typical_range': [20, 200]},
+        'UK100': {'pip_value': 0.1, 'typical_range': [20, 200]},
+        'JP225': {'pip_value': 1.0, 'typical_range': [50, 500]},
+        'TecDE30': {'pip_value': 0.1, 'typical_range': [20, 200]},
+        'USTEC': {'pip_value': 0.1, 'typical_range': [20, 200]},
+        
+        # Commodities
+        'XTIUSD': {'pip_value': 0.01, 'typical_range': [50, 500]},  # Oil
+        'XBRUSD': {'pip_value': 0.01, 'typical_range': [50, 500]},  # Brent
+        'XNGUSD': {'pip_value': 0.001, 'typical_range': [100, 1000]} # Natural Gas
+    }
+    
+    return pip_config.get(symbol, {'pip_value': 0.0001, 'typical_range': [20, 200]})
+
 def calculate_regime_based_predictions(symbol: str, regime: str, features: dict) -> dict:
     """Calcular predicciones basadas en régimen usando lógica mejorada"""
     
     # Obtener configuración del símbolo y régimen
     config = REGIME_CONFIG.get(regime, {}).get(symbol, REGIME_CONFIG['ranging']['XAUUSD'])
     
+    # Obtener características reales del símbolo
+    symbol_info = get_symbol_pip_characteristics(symbol)
+    
     sl_base = config['sl_base']
     tp_base = config['tp_base']
+    
+    # Ajustar valores base según características reales del símbolo
+    typical_range = symbol_info['typical_range']
+    if sl_base < typical_range[0]:
+        sl_base = typical_range[0]
+    elif sl_base > typical_range[1]:
+        sl_base = typical_range[1]
+        
+    if tp_base < typical_range[0] * 1.5:
+        tp_base = typical_range[0] * 1.5
+    elif tp_base > typical_range[1] * 2:
+        tp_base = typical_range[1] * 2
     
     # Factores de ajuste basados en features
     atr_factor = 0.8 + (features.get('atr_percentile_100', 50) / 100) * 0.6  # 0.8-1.4
@@ -285,6 +362,10 @@ def calculate_regime_based_predictions(symbol: str, regime: str, features: dict)
     # Log si se aplicaron límites
     if abs(sl_final - sl_before_limit) > 0.1 or abs(tp_final - tp_before_limit) > 0.1:
         logger.info(f"🔒 Limits applied for {symbol}: SL {sl_before_limit:.1f}→{sl_final:.1f}, TP {tp_before_limit:.1f}→{tp_final:.1f}")
+    
+    # Log características del símbolo para debug
+    pip_value = symbol_info['pip_value']
+    logger.info(f"🔧 Symbol {symbol}: pip_value={pip_value}, range={typical_range}, regime={regime}")
     
     return {
         'sl_pips': round(sl_final, 1),
