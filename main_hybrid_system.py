@@ -259,13 +259,32 @@ def calculate_regime_based_predictions(symbol: str, regime: str, features: dict)
         sl_final = sl_base * atr_factor
         tp_final = tp_base * atr_factor * 1.1
     
-    # Aplicar límites
-    if symbol == 'XAUUSD':
+    # Aplicar límites inteligentes por categoría
+    sl_before_limit = sl_final
+    tp_before_limit = tp_final
+    
+    if symbol in ['XAUUSD', 'XAGUSD', 'XPTUSD']:  # Metals
         sl_final = max(50.0, min(sl_final, 400.0))
         tp_final = max(80.0, min(tp_final, 600.0))
-    else:
+    elif symbol in ['BTCUSD', 'ETHUSD', 'LTCUSD', 'ADAUSD', 'SOLUSD', 'XRPUSD']:  # Crypto
+        sl_final = max(30.0, min(sl_final, 300.0))
+        tp_final = max(60.0, min(tp_final, 500.0))
+    elif symbol in ['US30', 'US500', 'UK100', 'JP225', 'TecDE30', 'USTEC']:  # Indices
+        sl_final = max(50.0, min(sl_final, 350.0))
+        tp_final = max(100.0, min(tp_final, 600.0))
+    elif symbol in ['XTIUSD', 'XBRUSD', 'XNGUSD']:  # Commodities
+        sl_final = max(40.0, min(sl_final, 250.0))
+        tp_final = max(80.0, min(tp_final, 450.0))
+    elif 'JPY' in symbol:  # JPY pairs
+        sl_final = max(30.0, min(sl_final, 250.0))
+        tp_final = max(60.0, min(tp_final, 450.0))
+    else:  # Regular forex pairs
         sl_final = max(20.0, min(sl_final, 200.0))
-        tp_final = max(40.0, min(tp_final, 400.0))
+        tp_final = max(40.0, min(tp_final, 350.0))
+    
+    # Log si se aplicaron límites
+    if abs(sl_final - sl_before_limit) > 0.1 or abs(tp_final - tp_before_limit) > 0.1:
+        logger.info(f"🔒 Limits applied for {symbol}: SL {sl_before_limit:.1f}→{sl_final:.1f}, TP {tp_before_limit:.1f}→{tp_final:.1f}")
     
     return {
         'sl_pips': round(sl_final, 1),
