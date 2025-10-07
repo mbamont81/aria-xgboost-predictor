@@ -9,11 +9,8 @@ from pydantic import BaseModel
 import numpy as np
 import joblib
 import os
-import psycopg2
-import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
-from typing import Optional
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -21,64 +18,6 @@ logger = logging.getLogger(__name__)
 
 # Variables globales
 models = {}
-
-# Variables para continuous learning
-training_data_count = 0
-
-def get_database_connection():
-    """Obtener conexión a PostgreSQL"""
-    try:
-        # URL de conexión desde variable de entorno
-        database_url = os.getenv('DATABASE_URL')
-        if not database_url:
-            logger.warning("⚠️ DATABASE_URL not found, streamed_trades integration disabled")
-            return None
-            
-        conn = psycopg2.connect(database_url)
-        return conn
-    except Exception as e:
-        logger.error(f"❌ Database connection error: {e}")
-        return None
-
-def store_training_data(request: TrainingDataRequest):
-    """Almacenar datos de entrenamiento en PostgreSQL"""
-    try:
-        conn = get_database_connection()
-        if not conn:
-            return False
-            
-        cursor = conn.cursor()
-        
-        # Insertar datos en streamed_trades
-        insert_query = """
-        INSERT INTO streamed_trades (
-            symbol, trade_type, entry_price, exit_price, profit,
-            open_time, close_time, atr_at_open, rsi_at_open,
-            ma50_at_open, ma200_at_open, volatility_at_open,
-            xgboost_confidence, market_regime, was_xgboost_used,
-            stream_timestamp
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """
-        
-        cursor.execute(insert_query, (
-            request.symbol, request.trade_type, request.entry_price,
-            request.exit_price, request.profit, request.open_time,
-            request.close_time, request.atr_at_open, request.rsi_at_open,
-            request.ma50_at_open, request.ma200_at_open, request.volatility_at_open,
-            request.xgboost_confidence, request.market_regime, request.was_xgboost_used,
-            datetime.now()
-        ))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        logger.info(f"✅ Training data stored: {request.symbol} (profit: {request.profit})")
-        return True
-        
-    except Exception as e:
-        logger.error(f"❌ Error storing training data: {e}")
-        return False
 
 # Configuración mejorada por régimen - EXPANDIDA
 REGIME_CONFIG = {
@@ -249,29 +188,6 @@ class PredictionResponse(BaseModel):
     overall_confidence: float
     model_used: str
     processing_time_ms: float
-
-# NUEVA: Estructura para recibir datos de entrenamiento del EA
-class TrainingDataRequest(BaseModel):
-    symbol: str
-    trade_type: int  # 0=buy, 1=sell
-    entry_price: float
-    exit_price: float
-    profit: float
-    open_time: str
-    close_time: str
-    atr_at_open: float
-    rsi_at_open: float
-    ma50_at_open: float
-    ma200_at_open: float
-    volatility_at_open: float
-    xgboost_confidence: float
-    market_regime: str
-    was_xgboost_used: bool
-
-class TrainingDataResponse(BaseModel):
-    success: bool
-    message: str
-    trades_stored: int
 
 def normalize_symbol_for_xgboost(symbol: str) -> str:
     """Normaliza símbolos de broker a formato estándar"""
@@ -499,10 +415,10 @@ async def health_check():
 async def root():
     """Endpoint principal"""
     return {
-        "service": "ARIA XGBoost Hybrid Predictor with streamed_trades",
-        "version": "5.3.1-HYBRID_ENHANCED_FORCED",
+        "service": "ARIA XGBoost Hybrid Predictor",
+        "version": "5.2.0-HYBRID_SYSTEM",
         "status": "operational",
-        "system_info": {"type": "hybrid_ml_predictor_with_continuous_learning"},
+        "system_info": {"type": "hybrid_ml_predictor"},
         "models_loaded": len(models),
         "symbols_available": [
             # Majors
@@ -523,10 +439,7 @@ async def root():
             "regime_detection": "ML_based",
             "predictions": "regime_aware_rules",
             "continuous_learning": "enabled",
-            "hybrid_approach": "classifier_ml_plus_rules",
-            "streamed_trades_integration": "active",
-            "training_data_endpoint": "/xgboost/add_training_data",
-            "training_status_endpoint": "/xgboost/training_status"
+            "hybrid_approach": "classifier_ml_plus_rules"
         }
     }
 
@@ -692,67 +605,6 @@ async def predict_full(request: PredictionRequest):
     except Exception as e:
         logger.error(f"❌ Error en predicción: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
-
-@app.post("/xgboost/add_training_data")
-async def add_training_data(request: TrainingDataRequest):
-    """Endpoint para recibir datos de entrenamiento del EA"""
-    global training_data_count
-    
-    try:
-        logger.info(f"📊 Training data received: {request.symbol} (profit: {request.profit})")
-        
-        # Almacenar en database si está disponible
-        stored = store_training_data(request)
-        
-        if stored:
-            training_data_count += 1
-            
-        return TrainingDataResponse(
-            success=stored,
-            message=f"Training data {'stored' if stored else 'received'} for {request.symbol}",
-            trades_stored=training_data_count
-        )
-        
-    except Exception as e:
-        logger.error(f"❌ Error processing training data: {e}")
-        return TrainingDataResponse(
-            success=False,
-            message=f"Error: {str(e)}",
-            trades_stored=training_data_count
-        )
-
-@app.get("/xgboost/training_status")
-async def training_status():
-    """Estado del sistema de entrenamiento"""
-    try:
-        conn = get_database_connection()
-        if conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM streamed_trades WHERE was_xgboost_used = true")
-            total_trades = cursor.fetchone()[0]
-            cursor.close()
-            conn.close()
-            
-            return {
-                "database_connected": True,
-                "total_trades": total_trades,
-                "trades_received": training_data_count,
-                "continuous_learning": "active"
-            }
-        else:
-            return {
-                "database_connected": False,
-                "total_trades": 0,
-                "trades_received": training_data_count,
-                "continuous_learning": "disabled"
-            }
-    except Exception as e:
-        return {
-            "database_connected": False,
-            "error": str(e),
-            "trades_received": training_data_count,
-            "continuous_learning": "error"
-        }
 
 if __name__ == "__main__":
     import uvicorn
