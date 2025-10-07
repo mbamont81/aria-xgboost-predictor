@@ -310,6 +310,18 @@ def calculate_regime_based_predictions(symbol: str, regime: str, features: dict)
     
     # Ajustar valores base según características reales del símbolo
     typical_range = symbol_info['typical_range']
+    pip_value = symbol_info['pip_value']
+    
+    # Normalizar configuraciones base según el pip_value del símbolo
+    if pip_value == 0.0001:  # Forex majors (EURUSD, GBPUSD, etc.)
+        sl_base = sl_base * 0.5  # Reducir para forex
+        tp_base = tp_base * 0.5
+    elif pip_value == 1.0:  # Indices (US30, etc.)
+        sl_base = sl_base * 2.0  # Aumentar para índices
+        tp_base = tp_base * 2.0
+    # Para pip_value = 0.01 (XAUUSD, USDJPY) mantener valores originales
+    
+    # Validar contra rangos típicos
     if sl_base < typical_range[0]:
         sl_base = typical_range[0]
     elif sl_base > typical_range[1]:
