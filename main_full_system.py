@@ -211,38 +211,79 @@ last_retrain_time = datetime.now()
 retraining_in_progress = False
 
 def load_models():
-    """Cargar todos los modelos al iniciar la aplicación"""
+    """Cargar todos los modelos al iniciar la aplicación con manejo detallado de errores"""
     global models
     
     models_dir = "models"
     if not os.path.exists(models_dir):
-        logger.error(f"Directorio {models_dir} no encontrado")
+        logger.error(f"❌ Directorio {models_dir} no encontrado")
         return False
     
+    # Cargar clasificador de régimen
     try:
-        # Cargar clasificador de regímenes
         models['regime_classifier'] = joblib.load(f"{models_dir}/regime_classifier.pkl")
-        logger.info("Clasificador de regímenes cargado")
-        
-        # Cargar modelos especializados
-        regimes = ['volatile', 'ranging', 'trending']
-        for regime in regimes:
-            sl_path = f"{models_dir}/xgb_{regime}_sl.pkl"
-            tp_path = f"{models_dir}/xgb_{regime}_tp.pkl"
-            
-            if os.path.exists(sl_path) and os.path.exists(tp_path):
-                models[f'{regime}_sl'] = joblib.load(sl_path)
-                models[f'{regime}_tp'] = joblib.load(tp_path)
-                logger.info(f"Modelos {regime} cargados")
-            else:
-                logger.warning(f"Modelos {regime} no encontrados")
-        
-        logger.info(f"Total modelos cargados: {len(models)}")
-        return True
-        
+        logger.info("✅ Regime classifier loaded successfully")
     except Exception as e:
-        logger.error(f"Error cargando modelos: {e}")
+        logger.error(f"❌ Error loading regime classifier: {e}")
         return False
+    
+    # Cargar modelos XGBoost con manejo de errores detallado
+    xgb_models = [
+        'volatile_sl', 'volatile_tp',
+        'ranging_sl', 'ranging_tp', 
+        'trending_sl', 'trending_tp'
+    ]
+    
+    for model_name in xgb_models:
+        try:
+            # Intenta diferentes nombres de archivo
+            file_paths = [
+                f'{models_dir}/xgb_{model_name}.pkl',
+                f'{models_dir}/{model_name}.pkl',
+                f'{models_dir}/{model_name}_model.pkl'
+            ]
+            
+            loaded = False
+            for path in file_paths:
+                try:
+                    if os.path.exists(path):
+                        models[model_name] = joblib.load(path)
+                        logger.info(f"✅ Model {model_name} loaded from {path}")
+                        loaded = True
+                        break
+                except FileNotFoundError:
+                    logger.debug(f"🔍 File not found: {path}")
+                    continue
+                except Exception as e:
+                    logger.warning(f"⚠️ Error loading {path}: {e}")
+                    continue
+            
+            if not loaded:
+                logger.error(f"❌ Could not load {model_name} from any path")
+                # List available files for debugging
+                try:
+                    available_files = [f for f in os.listdir(models_dir) if f.endswith('.pkl')]
+                    logger.info(f"🔍 Available PKL files: {available_files}")
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"❌ Unexpected error loading {model_name}: {e}")
+    
+    logger.info(f"📊 Total models loaded: {list(models.keys())}")
+    logger.info(f"📊 Models count: {len(models)}")
+    
+    # Verify we have the minimum required models
+    required_models = ['regime_classifier', 'volatile_sl', 'volatile_tp', 'ranging_sl', 'ranging_tp', 'trending_sl', 'trending_tp']
+    missing_models = [model for model in required_models if model not in models]
+    
+    if missing_models:
+        logger.warning(f"⚠️ Missing models: {missing_models}")
+        logger.warning(f"⚠️ Service will work with limited functionality")
+    else:
+        logger.info("🎉 All required models loaded successfully!")
+    
+    return len(models) > 0
 
 def validate_features(features: np.ndarray) -> bool:
     """Validar que las features estén en rangos razonables"""
