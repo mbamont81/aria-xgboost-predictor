@@ -1,1 +1,1 @@
-web: uvicorn main_hybrid_system:app --host 0.0.0.0 --port $PORT
+web: uvicorn main_full_system:app --host 0.0.0.0 --port $PORT

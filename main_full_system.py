@@ -496,6 +496,16 @@ async def startup_event():
     else:
         logger.info("✅ Model loading completed successfully")
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint para el EA"""
+    return {
+        "status": "healthy",
+        "service": "ARIA Full System with streamed_trades",
+        "models_loaded": len(models),
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/")
 async def root():
     """Endpoint de prueba"""
@@ -531,8 +541,65 @@ async def health_check():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/predict")
+async def predict_legacy(
+    symbol: str = "XAUUSD",
+    lot_size: float = 0.01,
+    atr: float = 50.0,
+    trend_strength: float = 0.0
+):
+    """Endpoint legacy compatible con formato antiguo del EA"""
+    try:
+        logger.info(f"🔄 Legacy request: {symbol}, ATR={atr}, trend={trend_strength}")
+        
+        # Convertir formato antiguo a nuevo
+        request_data = PredictionRequest(
+            symbol=symbol,
+            atr_percentile_100=atr,
+            rsi_std_20=0.5,
+            price_acceleration=trend_strength,
+            candle_body_ratio_mean=0.7,
+            breakout_frequency=0.3,
+            volume_imbalance=0.1,
+            rolling_autocorr_20=0.2,
+            hurst_exponent_50=0.5,
+            timeframe="M1"
+        )
+        
+        # Usar la misma lógica de predicción
+        result = await predict_full(request_data)
+        
+        # Formato de respuesta compatible con EA
+        return {
+            "success": result.success,
+            "sl_pips": result.sl_pips,
+            "tp_pips": result.tp_pips,
+            "sl_points": result.sl_pips,
+            "tp_points": result.tp_pips,
+            "confidence": result.overall_confidence / 100.0,
+            "regime": result.detected_regime,
+            "market_regime": result.detected_regime,
+            "risk_reward_ratio": result.tp_pips / max(result.sl_pips, 1.0),
+            "model": result.model_used
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error in legacy endpoint: {e}")
+        return {
+            "success": False,
+            "sl_pips": 100.0,
+            "tp_pips": 200.0,
+            "sl_points": 100.0,
+            "tp_points": 200.0,
+            "confidence": 0.50,
+            "regime": "fallback",
+            "market_regime": "fallback",
+            "risk_reward_ratio": 2.0,
+            "model": "error_fallback"
+        }
+
 @app.post("/predict", response_model=PredictionResponse)
-async def predict_regime_sltp(request: PredictionRequest):
+async def predict_full(request: PredictionRequest):
     """Endpoint principal para predicciones regime-aware con filtro de confidence"""
     start_time = datetime.now()
     
