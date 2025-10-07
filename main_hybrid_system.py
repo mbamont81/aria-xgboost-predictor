@@ -19,25 +19,52 @@ logger = logging.getLogger(__name__)
 # Variables globales
 models = {}
 
-# Configuración mejorada por régimen
+# Configuración mejorada por régimen - EXPANDIDA
 REGIME_CONFIG = {
     'volatile': {
         'XAUUSD': {'sl_base': 120, 'tp_base': 280},
         'EURUSD': {'sl_base': 90, 'tp_base': 200},
         'BTCUSD': {'sl_base': 150, 'tp_base': 350},
-        'GBPUSD': {'sl_base': 95, 'tp_base': 220}
+        'GBPUSD': {'sl_base': 95, 'tp_base': 220},
+        # Nuevos símbolos agregados
+        'USDJPY': {'sl_base': 85, 'tp_base': 190},
+        'AUDUSD': {'sl_base': 85, 'tp_base': 200},
+        'NZDUSD': {'sl_base': 80, 'tp_base': 185},
+        'USDCAD': {'sl_base': 75, 'tp_base': 175},
+        'USDCHF': {'sl_base': 80, 'tp_base': 180},
+        'EURGBP': {'sl_base': 70, 'tp_base': 165},
+        'EURJPY': {'sl_base': 100, 'tp_base': 230},
+        'GBPJPY': {'sl_base': 110, 'tp_base': 250}
     },
     'ranging': {
         'XAUUSD': {'sl_base': 80, 'tp_base': 180},
         'EURUSD': {'sl_base': 60, 'tp_base': 140},
         'BTCUSD': {'sl_base': 100, 'tp_base': 230},
-        'GBPUSD': {'sl_base': 70, 'tp_base': 160}
+        'GBPUSD': {'sl_base': 70, 'tp_base': 160},
+        # Nuevos símbolos agregados
+        'USDJPY': {'sl_base': 55, 'tp_base': 125},
+        'AUDUSD': {'sl_base': 60, 'tp_base': 135},
+        'NZDUSD': {'sl_base': 55, 'tp_base': 130},
+        'USDCAD': {'sl_base': 50, 'tp_base': 120},
+        'USDCHF': {'sl_base': 55, 'tp_base': 125},
+        'EURGBP': {'sl_base': 45, 'tp_base': 110},
+        'EURJPY': {'sl_base': 70, 'tp_base': 155},
+        'GBPJPY': {'sl_base': 75, 'tp_base': 170}
     },
     'trending': {
         'XAUUSD': {'sl_base': 100, 'tp_base': 250},
         'EURUSD': {'sl_base': 75, 'tp_base': 180},
         'BTCUSD': {'sl_base': 120, 'tp_base': 300},
-        'GBPUSD': {'sl_base': 85, 'tp_base': 200}
+        'GBPUSD': {'sl_base': 85, 'tp_base': 200},
+        # Nuevos símbolos agregados
+        'USDJPY': {'sl_base': 70, 'tp_base': 160},
+        'AUDUSD': {'sl_base': 75, 'tp_base': 170},
+        'NZDUSD': {'sl_base': 70, 'tp_base': 155},
+        'USDCAD': {'sl_base': 65, 'tp_base': 150},
+        'USDCHF': {'sl_base': 70, 'tp_base': 155},
+        'EURGBP': {'sl_base': 60, 'tp_base': 140},
+        'EURJPY': {'sl_base': 85, 'tp_base': 195},
+        'GBPJPY': {'sl_base': 95, 'tp_base': 220}
     }
 }
 
@@ -172,7 +199,7 @@ async def root():
         "status": "operational",
         "system_info": {"type": "hybrid_ml_predictor"},
         "models_loaded": len(models),
-        "symbols_available": ["BTCUSD", "EURUSD", "GBPUSD", "XAUUSD"],
+        "symbols_available": ["XAUUSD", "EURUSD", "GBPUSD", "BTCUSD", "USDJPY", "AUDUSD", "NZDUSD", "USDCAD", "USDCHF", "EURGBP", "EURJPY", "GBPJPY"],
         "features": {
             "regime_detection": "ML_based",
             "predictions": "regime_aware_rules",
@@ -232,7 +259,7 @@ async def predict(request: PredictionRequest):
         logger.info(f"🎯 Regime detected: {detected_regime} ({regime_confidence:.1f}% confidence)")
         
         # Check if symbol is supported
-        supported_symbols = ["BTCUSD", "EURUSD", "GBPUSD", "XAUUSD"]
+        supported_symbols = ["XAUUSD", "EURUSD", "GBPUSD", "BTCUSD", "USDJPY", "AUDUSD", "NZDUSD", "USDCAD", "USDCHF", "EURGBP", "EURJPY", "GBPJPY"]
         if normalized_symbol not in supported_symbols:
             logger.warning(f"⚠️ Symbol {normalized_symbol} not in optimized config, using XAUUSD defaults")
         else:
