@@ -511,8 +511,27 @@ async def predict_regime_sltp(request: PredictionRequest):
         regime_pred = regime_classifier.predict(features_array)[0]
         regime_proba = regime_classifier.predict_proba(features_array)[0]
         
+        # DEBUG: Log prediction details
+        logger.info(f"🔍 Regime prediction raw: {regime_pred} (type: {type(regime_pred)})")
+        logger.info(f"🔍 Regime probabilities: {regime_proba}")
+        
         regimes = ['volatile', 'ranging', 'trending']
+        
+        # Ensure regime_pred is an integer
+        if isinstance(regime_pred, (str, float)):
+            try:
+                regime_pred = int(regime_pred)
+            except (ValueError, TypeError):
+                logger.error(f"❌ Invalid regime prediction: {regime_pred}")
+                regime_pred = 1  # Default to 'ranging'
+        
+        # Validate regime_pred is within bounds
+        if not isinstance(regime_pred, int) or regime_pred < 0 or regime_pred >= len(regimes):
+            logger.error(f"❌ Regime prediction out of bounds: {regime_pred}")
+            regime_pred = 1  # Default to 'ranging'
+        
         detected_regime = regimes[regime_pred]
+        logger.info(f"🎯 Final detected regime: {detected_regime}")
         regime_confidence = max(regime_proba)
         regime_weights = dict(zip(regimes, regime_proba))
         
