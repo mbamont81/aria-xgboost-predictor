@@ -444,7 +444,7 @@ async def root():
     return {
         "message": "Aria Regime-Aware XGBoost API",
         "status": "active",
-        "version": "5.0.0-CONTINUOUS_LEARNING",  # Major upgrade: continuous learning
+        "version": "5.1.0-PKL_MODELS_ACTIVE",  # CONFIRMED: PKL models and continuous learning
         "deployment_time": "2025-10-06 19:00:00",
         "models_loaded": len(models),
         "symbol_normalization": "enabled",
