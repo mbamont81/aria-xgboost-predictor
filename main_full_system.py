@@ -558,20 +558,35 @@ async def predict_regime_sltp(request: PredictionRequest):
         
         regimes = ['volatile', 'ranging', 'trending']
         
-        # Ensure regime_pred is an integer
-        if isinstance(regime_pred, (str, float)):
+        # Handle regime prediction - can be string or integer
+        if isinstance(regime_pred, str):
+            # If it's a string, map it directly
+            if regime_pred in regimes:
+                detected_regime = regime_pred
+                regime_pred = regimes.index(regime_pred)  # Convert to index for consistency
+                logger.info(f"🎯 String regime prediction: {detected_regime}")
+            else:
+                logger.error(f"❌ Unknown regime string: {regime_pred}")
+                regime_pred = 1  # Default to 'ranging'
+                detected_regime = regimes[regime_pred]
+        elif isinstance(regime_pred, (float, np.floating)):
             try:
                 regime_pred = int(regime_pred)
-            except (ValueError, TypeError):
+                detected_regime = regimes[regime_pred]
+            except (ValueError, TypeError, IndexError):
                 logger.error(f"❌ Invalid regime prediction: {regime_pred}")
                 regime_pred = 1  # Default to 'ranging'
+                detected_regime = regimes[regime_pred]
+        else:
+            # Already an integer, use as is
+            detected_regime = regimes[regime_pred]
         
         # Validate regime_pred is within bounds
         if not isinstance(regime_pred, int) or regime_pred < 0 or regime_pred >= len(regimes):
             logger.error(f"❌ Regime prediction out of bounds: {regime_pred}")
             regime_pred = 1  # Default to 'ranging'
+            detected_regime = regimes[regime_pred]
         
-        detected_regime = regimes[regime_pred]
         logger.info(f"🎯 Final detected regime: {detected_regime}")
         regime_confidence = max(regime_proba)
         regime_weights = dict(zip(regimes, regime_proba))
