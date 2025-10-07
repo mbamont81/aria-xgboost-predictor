@@ -500,7 +500,7 @@ async def root():
     """Endpoint principal"""
     return {
         "service": "ARIA XGBoost Hybrid Predictor with streamed_trades",
-        "version": "5.3.0-HYBRID_ENHANCED",
+        "version": "5.3.1-HYBRID_ENHANCED_FORCED",
         "status": "operational",
         "system_info": {"type": "hybrid_ml_predictor_with_continuous_learning"},
         "models_loaded": len(models),
