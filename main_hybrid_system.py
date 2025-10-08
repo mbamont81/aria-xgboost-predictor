@@ -589,11 +589,15 @@ async def predict_legacy(
     symbol: str = "XAUUSD",
     lot_size: float = 0.01,
     atr: float = 50.0,
-    trend_strength: float = 0.0
+    trend_strength: float = 0.0,
+    timeframe: str = "M1"  # 🔧 NUEVO: Parámetro timeframe para GET requests
 ):
     """Endpoint legacy compatible con formato antiguo del EA"""
     try:
         logger.info(f"🔄 Legacy request: {symbol}, ATR={atr}, trend={trend_strength}")
+        
+        # 🔧 MEJORADO: Usar timeframe recibido del EA
+        logger.info(f"⏰ GET request with timeframe: {timeframe}")
         
         # Convertir formato antiguo a nuevo
         request_data = PredictionRequest(
@@ -606,7 +610,7 @@ async def predict_legacy(
             volume_imbalance=0.1,  # Valor por defecto
             rolling_autocorr_20=0.2,  # Valor por defecto
             hurst_exponent_50=0.5,  # Valor por defecto
-            timeframe="M1"
+            timeframe=timeframe  # 🔧 USAR TIMEFRAME DEL EA
         )
         
         # Usar la misma lógica de predicción
