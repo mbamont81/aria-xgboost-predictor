@@ -503,7 +503,7 @@ async def root():
     """Endpoint principal"""
     return {
         "service": "ARIA XGBoost Hybrid Predictor",
-        "version": "5.2.0-HYBRID_SYSTEM",
+        "version": "5.4.0-JPY_CORRECTED",
         "status": "operational",
         "system_info": {"type": "hybrid_ml_predictor"},
         "models_loaded": len(models),
