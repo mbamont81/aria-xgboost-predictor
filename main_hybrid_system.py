@@ -398,7 +398,10 @@ def calculate_regime_based_predictions(symbol: str, regime: str, features: dict)
     elif pip_value == 1.0:  # Indices (US30, etc.)
         sl_base = sl_base * 2.0  # Aumentar para índices
         tp_base = tp_base * 2.0
-    # Para pip_value = 0.01 (XAUUSD, USDJPY) mantener valores originales
+    elif 'JPY' in symbol:  # JPY pairs need special handling
+        sl_base = sl_base * 0.1  # JPY: 1 pip = 10 puntos, reducir por 10
+        tp_base = tp_base * 0.1
+    # Para pip_value = 0.01 (XAUUSD) mantener valores originales
     
     # Validar contra rangos típicos
     if sl_base < typical_range[0]:
