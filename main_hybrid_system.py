@@ -375,7 +375,54 @@ def get_symbol_pip_characteristics(symbol: str) -> dict:
     
     return pip_config.get(symbol, {'pip_value': 0.0001, 'typical_range': [20, 200]})
 
-def calculate_regime_based_predictions(symbol: str, regime: str, features: dict) -> dict:
+def get_timeframe_multipliers(timeframe: str) -> dict:
+    """Obtener multiplicadores de SL/TP basados en el timeframe"""
+    
+    # Configuración de multiplicadores por timeframe
+    # Timeframes más pequeños = SL/TP más conservadores
+    # Timeframes más grandes = SL/TP más amplios
+    timeframe_config = {
+        'M1': {
+            'sl_multiplier': 0.6,   # 40% más conservador
+            'tp_multiplier': 0.7,   # 30% más conservador
+            'description': 'Scalping - Conservador'
+        },
+        'M5': {
+            'sl_multiplier': 0.8,   # 20% más conservador
+            'tp_multiplier': 0.85,  # 15% más conservador
+            'description': 'Intraday corto'
+        },
+        'M15': {
+            'sl_multiplier': 1.0,   # Base (sin cambios)
+            'tp_multiplier': 1.0,   # Base (sin cambios)
+            'description': 'Base de referencia'
+        },
+        'M30': {
+            'sl_multiplier': 1.2,   # 20% más amplio
+            'tp_multiplier': 1.15,  # 15% más amplio
+            'description': 'Intraday medio'
+        },
+        'H1': {
+            'sl_multiplier': 1.5,   # 50% más amplio
+            'tp_multiplier': 1.3,   # 30% más amplio
+            'description': 'Swing corto'
+        },
+        'H4': {
+            'sl_multiplier': 2.0,   # 100% más amplio
+            'tp_multiplier': 1.6,   # 60% más amplio
+            'description': 'Swing medio'
+        },
+        'D1': {
+            'sl_multiplier': 2.5,   # 150% más amplio
+            'tp_multiplier': 2.0,   # 100% más amplio
+            'description': 'Swing largo'
+        }
+    }
+    
+    # Retornar configuración del timeframe o M15 por defecto
+    return timeframe_config.get(timeframe, timeframe_config['M15'])
+
+def calculate_regime_based_predictions(symbol: str, regime: str, features: dict, timeframe: str = "M15") -> dict:
     """Calcular predicciones basadas en régimen usando lógica mejorada"""
     
     # Obtener configuración del símbolo y régimen
@@ -386,6 +433,13 @@ def calculate_regime_based_predictions(symbol: str, regime: str, features: dict)
     
     sl_base = config['sl_base']
     tp_base = config['tp_base']
+    
+    # 🎯 AJUSTE POR TIMEFRAME
+    timeframe_multipliers = get_timeframe_multipliers(timeframe)
+    sl_base = sl_base * timeframe_multipliers['sl_multiplier']
+    tp_base = tp_base * timeframe_multipliers['tp_multiplier']
+    
+    logger.info(f"⏰ Timeframe {timeframe}: SL multiplier={timeframe_multipliers['sl_multiplier']:.2f}, TP multiplier={timeframe_multipliers['tp_multiplier']:.2f}")
     
     # Ajustar valores base según características reales del símbolo
     typical_range = symbol_info['typical_range']
@@ -669,8 +723,9 @@ async def predict_full(request: PredictionRequest):
         
         # Log key features that affect predictions
         logger.info(f"🔧 Key features: ATR={request.atr_percentile_100:.1f}, Volume_Imbalance={request.volume_imbalance:.3f}, Price_Accel={request.price_acceleration:.3f}")
+        logger.info(f"⏰ Using timeframe: {request.timeframe}")
         
-        predictions = calculate_regime_based_predictions(normalized_symbol, detected_regime, features_dict)
+        predictions = calculate_regime_based_predictions(normalized_symbol, detected_regime, features_dict, request.timeframe)
         
         # Calcular tiempo de procesamiento
         end_time = datetime.now()
