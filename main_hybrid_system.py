@@ -399,8 +399,13 @@ def calculate_regime_based_predictions(symbol: str, regime: str, features: dict)
         sl_base = sl_base * 2.0  # Aumentar para índices
         tp_base = tp_base * 2.0
     elif 'JPY' in symbol:  # JPY pairs need special handling
-        sl_base = sl_base * 0.1  # JPY: 1 pip = 10 puntos, reducir por 10
-        tp_base = tp_base * 0.1
+        # JPY pairs: El entrenamiento original tiene error fundamental
+        # Entrenamiento asumió: precio > 100 → pip_size = 0.01
+        # Realidad MT5: USDJPY 1 pip = 0.01 price pero en términos de trading es diferente
+        # Corrección agresiva necesaria para valores apropiados
+        sl_base = sl_base * 0.05  # Reducir por factor 20 (más agresivo)
+        tp_base = tp_base * 0.05
+        logger.info(f"🔧 JPY aggressive correction applied to {symbol}: base values reduced by 20x")
     # Para pip_value = 0.01 (XAUUSD) mantener valores originales
     
     # Validar contra rangos típicos
